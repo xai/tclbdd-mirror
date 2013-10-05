@@ -6882,7 +6882,7 @@ done
 #-----------------------------------------------------------------------
 
 
-    vars="generic/tclBdd.c"
+    vars="generic/bdd.c generic/tclBdd.c"
     for i in $vars; do
 	case $i in
 	    \$*)
@@ -6980,7 +6980,7 @@ echo "$as_me: error: could not find stub source file '$i'" >&2;}
 
 
 
-    vars=""
+    vars="library/tclbdd.tcl"
     for i in $vars; do
 	# check for existence, be strict because it is installed
 	if test ! -f "${srcdir}/$i" ; then
