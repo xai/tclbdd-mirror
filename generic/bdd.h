@@ -76,6 +76,9 @@ extern BDDAPI void BDD_DeleteSystem(BDD_System* sysPtr);
 
 #endif
 
+extern BDDAPI void BDD_IncrBeadRefCount(BDD_System* sysPtr, 
+					unsigned int bead);
+
 /*
  * Local Variables:
  * mode: c

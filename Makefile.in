@@ -252,7 +252,9 @@ VALGRINDARGS =	--tool=memcheck --num-callers=8 --leak-resolution=high \
 
 valgrind: binaries libraries
 	$(TCLSH_ENV) valgrind $(VALGRINDARGS) $(TCLSH_PROG) \
-		`@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS)
+		`@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS) \
+		-load "package ifneeded ${PACKAGE_NAME} ${PACKAGE_VERSION}\
+	                [list source `@CYGPATH@ $(srcdir)/library/tclbdd.tcl`]\;[list load `@CYGPATH@ ./$(PKG_LIB_FILE)` $(PACKAGE_NAME)]"
 
 valgrindshell: binaries libraries
 	$(TCLSH_ENV) valgrind $(VALGRINDARGS) $(TCLSH_PROG) $(SCRIPT)

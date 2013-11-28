@@ -13,5 +13,11 @@ namespace eval bdd {
     namespace export system
 }
 
+oo::class create bdd::SystemInt {
+    variable beadseq
+    constructor args {
+    }
+}
 oo::class create bdd::system {
+    superclass ::bdd::SystemInt
 }

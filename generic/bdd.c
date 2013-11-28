@@ -29,7 +29,10 @@
 static unsigned int HashTableSize(unsigned int);
 				/* Number of bits to use in a hash bucket
 				 * index */
-
+static void RemoveFromHash(BDD_System* sysPtr,
+				/* System of BDD's */
+			   unsigned int bead);
+				/* Bead to remove */
 
 /*
  *-----------------------------------------------------------------------------
@@ -83,6 +86,124 @@ HashTableSize(unsigned int n)	/* Number whose logarithm is needed. */
     /* Add in log of most significant 4 bits */
     return c + logs[n];
 
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * HashPair --
+ *
+ *	Combines two integers to make a hashcode for BDD management
+ *
+ * Results:
+ *	Returns an integer that depends on the two input numbers
+ *
+ * ----------------------------------------------------------------------
+ */
+
+static inline unsigned int
+HashPair(unsigned int i,	/* First integer to hash */
+	 unsigned int j)	/* Second integer to hash */
+{
+    Tcl_WideUInt iw = i;
+    iw += j;			/* i + j */
+    iw *= (iw + 1);		/* (i + j)*(i + j + 1) */
+    return (unsigned int)((iw >> 1) + i) % MODULUS;
+				/* ((i + j)*(i + j + 1))/2 + i */
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * HashTriple --
+ *
+ *	Computes a hash code for three integers in BDD management
+ *
+ * Results:
+ *	Returns the hash code.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static inline unsigned int
+HashTriple(unsigned int level, unsigned int low, unsigned int high)
+{
+    return HashPair(level, HashPair(low, high));
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * HashBead --
+ *
+ *	Computes the hash code for a bead in a BDD.
+ *
+ * Results:
+ *	Returns a hash code based on 'level', 'low' and 'high'.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static inline unsigned int
+HashBead(Bead* b)		/* Bead whose hash code is needed */
+{
+    return HashTriple(b->level, b->low, b->high);
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * RemoveFromHash --
+ *
+ *	Remove a deallocated bead from the hash table.
+ *
+ * Side effects:
+ *
+ *	The bead is unlinked from its hash bucket
+ *
+ * Notes:
+ *	Hash statistics could be kept here.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static inline void
+RemoveFromHash(
+    BDD_System* sysPtr,		/* System of BDDs in play */
+    unsigned int bead)		/* Bead to unlink */
+{
+    Bead* beads = sysPtr->beads;
+				/* Pointer to the deleted bead */
+    unsigned int hash = HashBead(beads+bead) & (sysPtr->hashSize - 1);
+				/* Hash code of the deleted bead */
+    unsigned int p;		/* Index of the bead prior to this one */
+    unsigned int next;		/* Index of the bead after p while searching */
+
+    /* Delete the bead from the bucket */
+    if (sysPtr->hashes[hash] == bead) {
+
+	/* First bead in the bucket */
+	sysPtr->hashes[hash] = beads[bead].next;
+	return;
+
+    } else {
+
+	/* Search for the bead prior to this  bead. */
+	for (p = sysPtr->hashes[hash]; p != 0; p = next) {
+	    next = beads[p].next;
+	    if (bead == next) {
+
+		/* Found the bead; unlink this one from the chain. */
+		beads[p].next = beads[bead].next;
+		return;
+	    }
+	}
+    }
+    
+    /* The bead wasn't in its hash bucket??? */
+
+    Tcl_Panic("couldn't find delete bead(%d,%d,%d) in hashtable",
+	      beads[bead].level, beads[bead].low, beads[bead].high);
 }
 
 /*
@@ -173,3 +294,84 @@ BDD_DeleteSystem(
     ckfree(sysPtr->beads);
     ckfree(sysPtr);
 }
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_IncrBeadRefCount --
+ *
+ *	Increments the reference count of a bead.
+ *
+ * Results:
+ *	None.
+ *
+ * Side effects:
+ *	Advances the reference count.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+void
+BDD_IncrBeadRefCount(BDD_System *sysPtr,
+				/* System of BDD's */
+		     unsigned int bead)
+  				/* Bead to adjust  */
+{
+    if (bead > 1) {
+	++(sysPtr->beads[bead].refCount);
+    }
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_UnrefBead --
+ *
+ *	Decrements the reference count of a bead.
+ *
+ * Results:
+ *	None.
+ *
+ * Side effects:
+ *	If the reference count hits zero, removes the bead from the hash table,
+ *	marks the bead as 'unused' by setting 'level' to all ones,
+ *	and adds the bead to the free list.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+void
+BDD_UnrefBead(
+    BDD_System* sysPtr,		/* Pointer to the system of BDDs in play */
+    unsigned int bead)		/* Index of the bead being unreferened */
+{
+    Bead* beads = sysPtr->beads;
+				/* Bead table */
+
+    if (bead <= 1) return;
+
+    if (--(beads[bead].refCount) == 0) {
+
+	/* Remove the bead from the hash table */
+	RemoveFromHash(sysPtr, bead);
+	
+	/* Mark the bead as freed. */
+	beads[bead].level = ~(unsigned int) 0;
+	
+	/* Add the bead to the free list as most recently used */
+	if (sysPtr->unusedBead == 0) {
+	    beads[bead].next = bead;
+	} else {
+	    beads[bead].next = beads[sysPtr->unusedBead].next;
+	    beads[sysPtr->unusedBead].next = bead;
+	}
+	sysPtr->unusedBead = bead;
+    }
+}
+
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 4
+ * End:
+ */
