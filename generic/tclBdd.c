@@ -240,8 +240,8 @@ const static Tcl_MethodType BddSystemUnsetMethodType = {
 MethodTableRow systemMethodTable[] = {
     { "!=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NE },
     { "&",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_AND },
-    { "<=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LE },
     { "<",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LT },
+    { "<=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LE },
     { "==",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_EQ },
     { ">",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_GT },
     { ">=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_GE },
