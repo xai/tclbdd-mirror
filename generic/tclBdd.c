@@ -109,10 +109,8 @@ static int BddSystemCopyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
 static int BddSystemDumpMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
-/* not yet there
 static int BddSystemNegateMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
-*/
 static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemNthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -189,8 +187,6 @@ const static Tcl_MethodType BddSystemDumpMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
-#if 0
-/* not yet there */
 const static Tcl_MethodType BddSystemNegateMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "negate",			   /* name */
@@ -198,7 +194,6 @@ const static Tcl_MethodType BddSystemNegateMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
-#endif
 const static Tcl_MethodType BddSystemNotnthvarMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "notnthvar",		   /* name */
@@ -265,9 +260,7 @@ MethodTableRow systemMethodTable[] = {
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
-    /* not yet there
     { "~",         &BddSystemNegateMethodType,    NULL },
-    */
     { NULL,	   NULL,                         NULL }
 };
 
@@ -301,6 +294,9 @@ Bdd_Init(Tcl_Interp* interp)
     int i;
 
     if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL) {
+	return TCL_ERROR;
+    }
+    if (Tcl_TomMath_InitStubs(interp, TCL_VERSION) == NULL) {
 	return TCL_ERROR;
     }
     if (Tcl_OOInitStubs(interp) == NULL) {
@@ -744,8 +740,6 @@ BddSystemDumpMethod(
  *-----------------------------------------------------------------------------
  */
 
-/* not yet there */
-#if 0
 static int
 BddSystemNegateMethod(
     ClientData clientData,	/* Operation to perform */
@@ -776,9 +770,9 @@ BddSystemNegateMethod(
     }
     resultIndex = BDD_Negate(sdata->system, operandIndex);
     SetNamedExpression(sdata, objv[skipped], resultIndex);
+    BDD_UnrefBead(sdata->system, resultIndex);
     return TCL_OK;
 }
-#endif
 
 /*
  *-----------------------------------------------------------------------------
@@ -832,6 +826,7 @@ BddSystemNthvarMethod(
     }
     beadIndex = BDD_NthVariable(sdata->system, (BDD_VariableIndex) varNum);
     SetNamedExpression(sdata, objv[skipped], beadIndex);
+    BDD_UnrefBead(sdata->system, beadIndex);
     return TCL_OK;
 }
 
@@ -887,6 +882,7 @@ BddSystemNotnthvarMethod(
     }
     beadIndex = BDD_NotNthVariable(sdata->system, (BDD_VariableIndex) varNum);
     SetNamedExpression(sdata, objv[skipped], beadIndex);
+    BDD_UnrefBead(sdata->system, beadIndex);
     return TCL_OK;
 }
 

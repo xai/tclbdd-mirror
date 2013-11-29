@@ -87,11 +87,11 @@ extern BDDAPI BDD_BeadIndex BDD_MakeBead(BDD_System* sysPtr,
 extern BDDAPI void BDD_IncrBeadRefCount(BDD_System* sysPtr, 
 					BDD_BeadIndex bead);
 extern BDDAPI void BDD_UnrefBead(BDD_System* sysPtr, BDD_BeadIndex bead);
+extern BDDAPI BDD_BeadIndex BDD_Negate(BDD_System* sysPtr, BDD_BeadIndex u);
 extern BDDAPI BDD_BeadIndex BDD_Apply(BDD_System* sysPtr, BDD_BinOp op,
 				      BDD_BeadIndex u1, BDD_BeadIndex u2);
 extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
-extern BDDAPI void BDD_Dotify(BDD_System* sysPtr, BDD_BeadIndex b);
 extern BDDAPI int BDD_Dump(Tcl_Interp*, Tcl_Obj*, BDD_System*, BDD_BeadIndex);
 extern BDDAPI void BDD_DeleteSystem(BDD_System* sysPtr);
 

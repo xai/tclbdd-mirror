@@ -448,13 +448,12 @@ BDD_NewSystem(BDD_BeadIndex n)
     sysPtr->hashes = (BDD_BeadIndex*) ckalloc(hashSize * sizeof(BDD_BeadIndex));
     sysPtr->hashSize = hashSize;
     memset(sysPtr->hashes, 0, hashSize * sizeof(BDD_BeadIndex));
-    sysPtr->varCount = 0;
 
     /* Initialize the constant beads. */
 
-    sysPtr->beads[0].level = ~(BDD_VariableIndex) 0;
+    sysPtr->beads[0].level = 0;
     sysPtr->beads[0].refCount = 2;
-    sysPtr->beads[1].level = ~(BDD_VariableIndex) 0;
+    sysPtr->beads[1].level = 0;
     sysPtr->beads[1].low = 1;
     sysPtr->beads[1].high = 1;
     sysPtr->beads[1].refCount = 2;
@@ -518,7 +517,7 @@ BDD_DeleteSystem(
 BDD_VariableIndex
 BDD_GetVariableCount(BDD_System* sysPtr)
 {
-    return sysPtr->varCount;
+    return sysPtr->beads[0].level;
 }
 
 /*
@@ -637,8 +636,9 @@ AddBead(
      * If the bead designates a variable not seen before, advance the
      * system variable count
      */
-    if (level >= sysPtr->varCount) {
-	sysPtr->varCount = level+1;
+    if (level >= sysPtr->beads[0].level) {
+	sysPtr->beads[0].level = level+1;
+	sysPtr->beads[1].level = level+1;
     }
 
     /* 
@@ -852,6 +852,64 @@ BDD_NotNthVariable(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_Negate --
+ *
+ *	Computes the negation of a BDD.
+ *
+ * Results:
+ *	Returns a BDD which is true where the given BDD is false, and
+ *	vice versa.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static BDD_BeadIndex
+Negate(
+    Tcl_HashTable* H,		/* Negations already computed */
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u)		/* BDD to negate */
+{
+    Tcl_HashEntry* entryPtr;	/* Hash entry for precomputed negation */
+    int newFlag;		/* Flag == 1 if no precomputed negation found */
+    Bead* uPtr = sysPtr->beads+u;
+				/* Pointer to the bead data */
+    BDD_BeadIndex result;	/* Resulting BDD */
+
+    /*
+     * Handle constants
+     */
+
+    entryPtr = Tcl_CreateHashEntry(H, u, &newFlag);
+    if (!newFlag) {
+	result = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
+	++sysPtr->beads[result].refCount;
+    } else if (u <= 1) {
+	result = !u;
+	++sysPtr->beads[result].refCount;
+    } else {
+	result = BDD_MakeBead(sysPtr, uPtr->level,
+			      Negate(H, sysPtr, uPtr->low),
+			      Negate(H, sysPtr, uPtr->high));
+    }
+    Tcl_SetHashValue(entryPtr, (ClientData) result);
+    return result;
+}
+BDD_BeadIndex
+BDD_Negate(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u)		/* BDD to negate */
+{
+    Tcl_HashTable H;		/* Hash table of precomputed results */
+    BDD_BeadIndex result;	/* Negation of the given BDD */
+    Tcl_InitHashTable(&H, TCL_ONE_WORD_KEYS);
+    result = Negate(&H, sysPtr, u);
+    Tcl_DeleteHashTable(&H);
+    return result;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_Apply --
  *
  *	Applies a Boolean operator between two BDD's.
@@ -895,7 +953,7 @@ Apply(
     if (!newFlag) {
 	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
 	++sysPtr->beads[result].refCount;
-    } else if (u1 < 2 && u2 < 2) {
+    } else if (u1 <= 1 && u2 <= 1) {
 	unsigned int i = ((unsigned int)u1 << 1) + (unsigned int)u2;
 	result = ((op>>i) & 1);
 	++sysPtr->beads[result].refCount;
@@ -982,13 +1040,13 @@ SatCount(
 				 * was created */
 
     /* Is the expression constant? */
-    if (x < 2) {
+    if (x <= 1) {
 	return mp_set_int(count, x);
     }
 
     /* Is the result cached? */
     Tcl_HashEntry* entryPtr = Tcl_CreateHashEntry(hashPtr, (void*) x, &new);
-    if (new) {
+    if (!new) {
 	mp_int* cachedResult = Tcl_GetHashValue(entryPtr);
 	return mp_copy(cachedResult, count);
     }
@@ -1031,6 +1089,9 @@ BDD_SatCount(
     int status;			/* Status return from tommath */
     Tcl_InitHashTable(&hash, TCL_ONE_WORD_KEYS);
     status = SatCount(sysPtr, &hash, x, count);
+    if (status == MP_OKAY) {
+	status = mp_mul_2d(count, sysPtr->beads[x].level, count);
+    }
     for (cleanup = Tcl_FirstHashEntry(&hash, &search);
 	 cleanup != NULL;
 	 cleanup = Tcl_NextHashEntry(&search)) {
@@ -1040,24 +1101,45 @@ BDD_SatCount(
 	Tcl_SetHashValue(cleanup, NULL);
     }
     Tcl_DeleteHashTable(&hash);
-    if (status == MP_OKAY) {
-	status = mp_mul_2d(count, sysPtr->beads[x].level, count);
-    }
     return status;
 }
 
-/* FIXME */
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_Dump --
+ *
+ *	Formats a BDD as a Tcl dictionary for debugging.
+ *
+ * Results:
+ *	Returns a standard Tcl result.
+ *
+ * Side effects:
+ *	The output object receives a dictionary whose keys are state numbers
+ *	and whose values are triples consisting of {level, nextStateIfFalse,
+ *	nextStateIfTrue}. The dictionary is in depth-first order starting
+ *	from the initial state.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
 static int
 Dump(
-    Tcl_HashTable* hash,
-    Tcl_Interp* interp,
-    Tcl_Obj* output,
-    BDD_System* sysPtr,
-    BDD_BeadIndex beadIndex)
+    Tcl_HashTable* hash,	/* Hash table of visited states */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_Obj* output,		/* Output object */
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex beadIndex)	/* Index of the bead being dumped */
 {
-    int newFlag;
+    int newFlag;		/* Has this object been seen before? */
     Tcl_CreateHashEntry(hash, (void*) beadIndex, &newFlag);
+
     if (newFlag) {
+
+	/* 
+	 * Make the triple {level ifFalse ifTrue} and store it in the
+	 * dictionary keyed by the bead index.
+	 */
 	Tcl_Obj* content = Tcl_NewObj();
 	Bead* beadPtr = sysPtr->beads + beadIndex;
 	BDD_VariableIndex level = beadPtr->level;
@@ -1077,6 +1159,10 @@ Dump(
 			      content) != TCL_OK) {
 	    return TCL_ERROR;
 	}
+
+	/*
+	 * If this bead isn't a leaf, dump its successors
+	 */
 	if (beadIndex > 1) {
 	    if (Dump(hash, interp, output, sysPtr, low) != TCL_OK
 		|| Dump(hash, interp, output, sysPtr, high) != TCL_OK) {
@@ -1088,15 +1174,28 @@ Dump(
 }
 int
 BDD_Dump(
-    Tcl_Interp* interp,
-    Tcl_Obj* output,
-    BDD_System* sysPtr,
-    BDD_BeadIndex beadIndex)
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_Obj* output,		/* Output object */
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex beadIndex)	/* Index of the bead to dump */
 {
-    Tcl_HashTable hashTable;
-    int result;
+    Tcl_HashTable hashTable;	/* Hash table of beads that have been seen */
+    int result;			/* Tcl status return */
+
+    /*
+     * We haven't seen any beads yet.
+     */
     Tcl_InitHashTable(&hashTable, TCL_ONE_WORD_KEYS);
+
+    /*
+     * Dump the BDD to the given object
+     */
+    Tcl_SetStringObj(output, NULL, 0);
     result = Dump(&hashTable, interp, output, sysPtr, beadIndex);
+
+    /*
+     * Clean up the hashtable
+     */
     Tcl_DeleteHashTable(&hashTable);
     return result;
 }

@@ -154,14 +154,14 @@ test bdd-5.2 {dump - leaf 0} {*}{
     -setup {bdd::system create sys}
     -body {sys dump 0}
     -cleanup {rename sys {}}
-    -result {0 {4294967295 0 0}}
+    -result {0 {0 0 0}}
 }
 
 test bdd-5.3 {dump - leaf 1} {*}{
     -setup {bdd::system create sys}
     -body {sys dump 1}
     -cleanup {rename sys {}}
-    -result {1 {4294967295 1 1}}
+    -result {1 {0 1 1}}
 }
 
 test bdd-6.1 {nthvar - wrong # args} {
@@ -185,14 +185,14 @@ test bdd-6.3 {nthvar - var 0} {
     -setup {bdd::system create sys}
     -body {sys nthvar a 0; sys dump a}
     -cleanup {rename sys {}}
-    -result {2 {0 0 1} 0 {4294967295 0 0} 1 {4294967295 1 1}}
+    -result {2 {0 0 1} 0 {1 0 0} 1 {1 1 1}}
 }
 
 test bdd-6.4 {nthvar - two vars} {
     -setup {bdd::system create sys}
     -body {sys nthvar a 0; sys nthvar b 1; list [sys dump b] [sys dump a]}
     -cleanup {rename sys {}}
-    -result {{3 {1 0 1} 0 {4294967295 0 0} 1 {4294967295 1 1}} {2 {0 0 1} 0 {4294967295 0 0} 1 {4294967295 1 1}}}
+    -result {{3 {1 0 1} 0 {2 0 0} 1 {2 1 1}} {2 {0 0 1} 0 {2 0 0} 1 {2 1 1}}}
 }
 
 test bdd-6.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
@@ -226,7 +226,7 @@ test bdd-7.3 {notnthvar - var 0} {
     -setup {bdd::system create sys}
     -body {sys notnthvar !a 0; sys dump !a}
     -cleanup {rename sys {}}
-    -result {2 {0 1 0} 1 {4294967295 1 1} 0 {4294967295 0 0}}
+    -result {2 {0 1 0} 1 {1 1 1} 0 {1 0 0}}
 }
 
 test bdd-7.4 {notnthvar - two vars} {
@@ -236,7 +236,7 @@ test bdd-7.4 {notnthvar - two vars} {
 	list [sys dump !b] [sys dump !a]
     }
     -cleanup {rename sys {}}
-    -result {{3 {1 1 0} 1 {4294967295 1 1} 0 {4294967295 0 0}} {2 {0 1 0} 1 {4294967295 1 1} 0 {4294967295 0 0}}}
+    -result {{3 {1 1 0} 1 {2 1 1} 0 {2 0 0}} {2 {0 1 0} 1 {2 1 1} 0 {2 0 0}}}
 }
 
 test bdd-7.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
@@ -249,7 +249,76 @@ test bdd-7.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
     -result {2 3 2}
 }
 
-test bdd-8.2 {binary operator - bad first expr} {*}{
+test bdd-8.1 {negate - wrong # args} {
+    -setup {bdd::system create sys}
+    -body {sys ~}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-8.2 {negate - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {list [catch {sys ~ b garbage} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-8.3 {negate 0} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {sys ~ b 0; sys beadindex b}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-8.4 {negate 1} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {sys ~ b 1; sys beadindex b}
+    -cleanup {rename sys {}}
+    -result 0
+}
+
+test bdd-8.5 {negate a} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {sys ~ b a; expr {[sys beadindex b] == [sys beadindex !a]}}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-8.5 {negate !a} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {sys ~ b !a; expr {[sys beadindex b] == [sys beadindex a]}}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-9.1 {binop - wrong # args} {
+    -setup {bdd::system create sys}
+    -body {sys nand}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-9.2 {binary operator - bad first expr} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -261,7 +330,7 @@ test bdd-8.2 {binary operator - bad first expr} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
-test bdd-8.3 {binary operator - bad second expr} {*}{
+test bdd-9.3 {binary operator - bad second expr} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -273,7 +342,7 @@ test bdd-8.3 {binary operator - bad second expr} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
-test bdd-8.4 {binary nor operator} {*}{
+test bdd-9.4 {binary nor operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -295,7 +364,7 @@ test bdd-8.4 {binary nor operator} {*}{
     -result {0001 0010 0100 1000}
 }
 
-test bdd-8.5 {binary < operator} {*}{
+test bdd-9.5 {binary < operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -317,7 +386,7 @@ test bdd-8.5 {binary < operator} {*}{
     -result {0100 1000 0001 0010}
 }
 
-test bdd-8.6 {binary > operator} {*}{
+test bdd-9.6 {binary > operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -339,7 +408,7 @@ test bdd-8.6 {binary > operator} {*}{
     -result {0010 0001 1000 0100}
 }
 
-test bdd-8.7 {binary ^ operator} {*}{
+test bdd-9.7 {binary ^ operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -361,7 +430,7 @@ test bdd-8.7 {binary ^ operator} {*}{
     -result {0110 1001 1001 0110}
 }
 
-test bdd-8.8 {binary nand operator} {*}{
+test bdd-9.8 {binary nand operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -382,7 +451,7 @@ test bdd-8.8 {binary nand operator} {*}{
     -cleanup {rename sys {}}
     -result {0111 1011 1101 1110}
 }
-test bdd-8.9 {binary & operator} {*}{
+test bdd-9.9 {binary & operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -405,7 +474,7 @@ test bdd-8.9 {binary & operator} {*}{
     -result {1000 0100 0010 0001}
 }
 
-test bdd-8.10 {binary == operator} {*}{
+test bdd-9.10 {binary == operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -427,7 +496,7 @@ test bdd-8.10 {binary == operator} {*}{
     -result  {1001 0110 0110 1001}
 }
 
-test bdd-8.11 {binary <= operator} {*}{
+test bdd-9.11 {binary <= operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -449,7 +518,7 @@ test bdd-8.11 {binary <= operator} {*}{
     -result {1101 1110 0111 1011}
 }
 
-test bdd-8.12 {binary >= operator} {*}{
+test bdd-9.12 {binary >= operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -471,7 +540,7 @@ test bdd-8.12 {binary >= operator} {*}{
     -result {1011 0111 1110 1101}
 }
 
-test bdd-8.13 {binary | operator} {*}{
+test bdd-9.13 {binary | operator} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -493,21 +562,23 @@ test bdd-8.13 {binary | operator} {*}{
     -result {1110 1101 1011 0111}
 }
 
-test bdd-9.1 {syllogism in the mode of barbara} {
+test bdd-10.1 {syllogism in the mode of barbara} {
     -setup {
 	bdd::system create sys
-	sys nthvar man 0
-	sys nthvar mortal 1
-	sys nthvar socrates 2
+	sys nthvar man(x) 0
+	sys nthvar mortal(x) 1
+	sys nthvar socrates(x) 2
     }
     -body {
-	sys <= major man mortal
-	sys <= minor socrates man
+	sys <= major man(x) mortal(x)
+	sys <= minor socrates(x) man(x)
 	sys & conjunct major minor
-	sys <= conclusion socrates mortal
-	sys <= test0 major conclusion
-	sys <= test1 minor conclusion
-	sys <= test2 conjunct conclusion
+	sys <= conclusion socrates(x) mortal(x)
+	sys <= test0 major conclusion;    # does the major premise imply 
+	;			          # the conclusion?
+	sys <= test1 minor conclusion;    # does the minor premise imply
+	;			          # the conclusion?
+	sys <= test2 conjunct conclusion; # is the syllogism valid?
 	list \
 	    [expr {[sys beadindex test0] == 1}] \
 	    [expr {[sys beadindex test1] == 1}] \
@@ -516,6 +587,251 @@ test bdd-9.1 {syllogism in the mode of barbara} {
     } 
     -cleanup {rename sys {}}
     -result {0 0 1 10110001}
+}
+
+test bdd-11.1 {demorgan} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	sys & c a b
+	sys nor d !a !b
+	expr {[sys beadindex c] == [sys beadindex d]}
+    }
+    -result 1
+    -cleanup {
+	rename sys {}
+   }
+}
+
+test bdd-11.2 {demorgan} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	sys | c a b
+	sys nand d !a !b
+	expr {[sys beadindex c] == [sys beadindex d]}
+    }
+    -result 1
+    -cleanup {
+	rename sys {}
+   }
+}
+
+test bdd-11.3 {demorgan} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	sys ^ c a b
+	sys ^ d !a !b
+	expr {[sys beadindex c] == [sys beadindex d]}
+    }
+    -result 1
+    -cleanup {
+	rename sys {}
+   }
+}
+
+test bdd-11.4 {demorgan} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	sys & c a b
+	sys | d !a !b
+	sys ~ d d
+	expr {[sys beadindex c] == [sys beadindex d]}
+    }
+    -result 1
+    -cleanup {
+	rename sys {}
+   }
+}
+
+test bdd-11.5 {demorgan} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	sys | c a b
+	sys & d !a !b
+	sys ~ d d
+	expr {[sys beadindex c] == [sys beadindex d]}
+    }
+    -result 1
+    -cleanup {
+	rename sys {}
+   }
+}
+
+test bdd-11.6 {demorgan} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	sys ^ c a b
+	sys == d !a !b
+	sys ~ d d
+	expr {[sys beadindex c] == [sys beadindex d]}
+    }
+    -result 1
+    -cleanup {
+	rename sys {}
+   }
+}
+
+test bdd-12.1 {satcount - wrong # args} {
+    -setup {bdd::system create sys}
+    -body {sys satcount}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-12.2 {satcount - no such expr} {
+    -setup {bdd::system create sys}
+    -body {list [catch {sys satcount garbage} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-12.3 {satcount - zero} {
+    -setup {bdd::system create sys}
+    -body {sys satcount 0}
+    -cleanup {rename sys {}}
+    -result 0
+}
+    
+test bdd-12.4 {satcount - no vars} {
+    -setup {bdd::system create sys}
+    -body {sys satcount 1}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-12.5 {satcount - one var} {
+    -setup {bdd::system create sys; sys nthvar a 0}
+    -body {sys satcount 1}
+    -cleanup {rename sys {}}
+    -result 2
+}
+
+test bdd-12.6 {satcount - two vars} {
+    -setup {bdd::system create sys; sys nthvar a 1}
+    -body {sys satcount 1}
+    -cleanup {rename sys {}}
+    -result 4
+}
+
+test bdd-12.7 {satcount - three vars} {
+    -setup {bdd::system create sys; sys nthvar a 2}
+    -body {sys satcount 1}
+    -cleanup {rename sys {}}
+    -result 8
+}
+
+test bdd-12.8 {satcount - one var of three} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+    }
+    -body {
+	list [sys satcount a] [sys satcount b] [sys satcount c]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {4 4 4}
+}
+
+test bdd-12.9 {satcount - two vars of three} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+    }
+    -body {
+	sys | r1 a b
+	sys | r2 a c
+	sys | r3 b c
+	list [sys satcount r1] [sys satcount r2] [sys satcount r3]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {6 6 6}
+}
+
+test bdd-12.10 {satcount - complex expr} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+	sys nthvar d 3
+	sys nthvar e 4
+	sys nthvar f 5
+	sys nthvar g 6
+	sys nthvar h 7
+	sys nthvar j 8
+    }
+    -body {
+	sys | r1 a b
+	sys & r2 c d
+	sys | r2 r2 e
+	sys & r1 r1 r2
+	sys | r2 f g
+	sys | r2 r2 h
+	sys & r1 r1 r2
+	sys ~ r2 r1
+	list [sys satcount r1] [sys satcount r2]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {210 302}
+}
+
+test bdd-12.11 {satcount - parity tree} {
+    -setup {
+	bdd::system create sys
+	for {set i 0} {$i < 128} {incr i} {
+	    sys nthvar v$i $i
+	}
+    }
+    -body {
+	sys copy r0 0
+	for {set i 0} {$i < 128} {incr i 2} {
+	    sys ^ r0 r0 v$i
+	}
+	for {set i 1} {$i < 128} {incr i 2} {
+	    sys ^ r0 r0 v$i
+	}
+	list [dict size [sys dump r0]] [format %llx [sys satcount r0]]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {257 80000000000000000000000000000000}
 }
 
 cleanupTests
