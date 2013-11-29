@@ -3,6 +3,7 @@
 #ifndef BDD_H_INCLUDED
 #define BDD_H_INCLUDED 1
 
+#include <stdlib.h>
 #include <tclTomMath.h>
 
 /*
@@ -56,28 +57,46 @@ typedef enum {			/* !a!b !ab a!b ab */
 
 typedef struct BDD_System BDD_System;
 
+/* Type of a bead index */
+
+typedef size_t BDD_BeadIndex;	/* Making this 'unsigned int'
+				 * limits the size of a BDD system to
+				 * 2**32 nodes but cuts the memory
+				 * usage (and bus bandwidth) roughly in 
+				 * half */
+typedef unsigned int BDD_VariableIndex;
+				/* Since the size of BDD's often is
+				 * exponential in the number of variables,
+				 * it's hard to imagine more than 
+				 * an 'unsigned int' worth. */
+
 #define BDDAPI /* TODO: work out the export gubbins */
 
-extern BDDAPI BDD_System* BDD_NewSystem(unsigned int n);
-extern BDDAPI void BDD_SetVariableCount(BDD_System* sysPtr, unsigned int n);
-extern BDDAPI unsigned int BDD_GetVariableCount(BDD_System* sysPtr);
-extern BDDAPI unsigned int BDD_NthVariable(BDD_System* sysPtr, unsigned int n);
-extern BDDAPI unsigned int BDD_NotNthVariable(BDD_System* sysPtr,
-					      unsigned int n);
-extern BDDAPI unsigned int BDD_MakeBead(BDD_System* sysPtr, unsigned int level,
-					unsigned int low, unsigned int high);
-extern BDDAPI unsigned int BDD_Apply(BDD_System* sysPtr, BDD_BinOp op,
-				     unsigned int u1, unsigned int u2);
-extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, unsigned int x,
+extern BDDAPI BDD_System* BDD_NewSystem(BDD_BeadIndex n);
+extern BDDAPI void BDD_SetVariableCount(BDD_System* sysPtr,
+					BDD_VariableIndex n);
+extern BDDAPI BDD_VariableIndex BDD_GetVariableCount(BDD_System* sysPtr);
+extern BDDAPI BDD_BeadIndex BDD_NthVariable(BDD_System* sysPtr,
+					    BDD_VariableIndex n);
+extern BDDAPI BDD_BeadIndex BDD_NotNthVariable(BDD_System* sysPtr,
+					       BDD_VariableIndex n);
+extern BDDAPI BDD_BeadIndex BDD_MakeBead(BDD_System* sysPtr,
+					 BDD_VariableIndex level,
+					 BDD_BeadIndex low,
+					 BDD_BeadIndex high);
+extern BDDAPI void BDD_IncrBeadRefCount(BDD_System* sysPtr, 
+					BDD_BeadIndex bead);
+extern BDDAPI void BDD_UnrefBead(BDD_System* sysPtr, BDD_BeadIndex bead);
+extern BDDAPI BDD_BeadIndex BDD_Apply(BDD_System* sysPtr, BDD_BinOp op,
+				      BDD_BeadIndex u1, BDD_BeadIndex u2);
+extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
-extern BDDAPI void BDD_Dotify(BDD_System* sysPtr, unsigned int b);
-extern BDDAPI void BDD_UnrefBead(BDD_System* sysPtr, unsigned int bead);
+extern BDDAPI void BDD_Dotify(BDD_System* sysPtr, BDD_BeadIndex b);
+extern BDDAPI int BDD_Dump(Tcl_Interp*, Tcl_Obj*, BDD_System*, BDD_BeadIndex);
 extern BDDAPI void BDD_DeleteSystem(BDD_System* sysPtr);
 
-#endif
 
-extern BDDAPI void BDD_IncrBeadRefCount(BDD_System* sysPtr, 
-					unsigned int bead);
+#endif /* not BDD_H_INCLUDED */
 
 /*
  * Local Variables:

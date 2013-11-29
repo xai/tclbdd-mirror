@@ -9,8 +9,34 @@ namespace import -force ::tcltest::*
 tcltest::loadTestedCommands
 package require bdd
 
+proc evdump {dump nvars node truth varindex} {
+    if {$node < 2} {
+	return $node
+    }
+    set v [expr {$truth & 1}]
+    set truth [expr {$truth >> 1}]
+    lassign [dict get $dump $node] testvar iffalse iftrue
+    if {$testvar > $varindex} {
+	tailcall evdump $dump $nvars $node $truth [expr {$varindex+1}]
+    } elseif {$v} {
+	tailcall evdump $dump $nvars $iftrue $truth [expr {$varindex+1}]
+    } else {
+	tailcall evdump $dump $nvars $iffalse $truth [expr {$varindex+1}]
+    }
+}
+
+proc truthtable {dump nvars} {
+    set root [lindex $dump 0]
+    set result {}
+    for {set i 0} {$i < (1<<$nvars)} {incr i} {
+	append result [evdump $dump $nvars $root $i 0]
+    }
+    return $result
+}
+
 test bdd-1.0 {simple create/delete} {
-    rename [bdd::system new] {}
+    set s [bdd::system new]
+    rename $s {}
 } {}
 
 test bdd-1.1 {create with nonstandard size} {
@@ -26,6 +52,470 @@ test bdd-1.3 {size not an integer} {*}{
     -body {rename [bdd::system new garbage] {}}
     -returnCodes error
     -result {expected integer but got "garbage"}
+}
+
+test bdd-2.1 {beadindex wrong # args} {*}{
+    -setup {bdd::system create sys}
+    -body {sys beadindex}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-2.2 {predefined 0} {*}{
+    -setup {bdd::system create sys}
+    -body {sys beadindex 0}
+    -cleanup {rename sys {}}
+    -result 0
+}
+
+test bdd-2.3 {predefined 1} {*}{
+    -setup {bdd::system create sys}
+    -body {sys beadindex 1}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-2.4 {expression not found} {*}{
+    -setup {bdd::system create sys}
+    -body {list [catch {sys beadindex garbage} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-3.1 {constant - wrong # args} {*}{
+    -setup {bdd::system create sys}
+    -body {sys constant}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-3.2 {constant - bad value} {*}{
+    -setup {bdd::system create sys}
+    -body {sys constant rubbish garbage}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {expected boolean value but got "garbage"}
+}
+
+test bdd-3.3 {constant 0} {*}{
+    -setup {bdd::system create sys}
+    -body {sys constant zero false; sys beadindex zero}
+    -cleanup {rename sys {}}
+    -result 0
+}
+
+test bdd-3.4 {constant 1} {*}{
+    -setup {bdd::system create sys}
+    -body {sys constant one true; sys beadindex one}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-4.1 {copy - wrong # args} {*}{
+    -setup {bdd::system create sys; sys constant one true}
+    -body {sys copy}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-4.2 {copy - can't find expr} {*}{
+    -setup {bdd::system create sys; sys constant one true}
+    -body {list [catch {sys copy yes garbage} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-4.3 {copy} {*}{
+    -setup {bdd::system create sys; sys constant one true}
+    -body {sys copy yes one; sys beadindex yes}
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-5.1 {dump - wrong # args} {*}{
+    -setup {bdd::system create sys}
+    -body {sys dump}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-5.2 {dump - leaf 0} {*}{
+    -setup {bdd::system create sys}
+    -body {sys dump 0}
+    -cleanup {rename sys {}}
+    -result {0 {4294967295 0 0}}
+}
+
+test bdd-5.3 {dump - leaf 1} {*}{
+    -setup {bdd::system create sys}
+    -body {sys dump 1}
+    -cleanup {rename sys {}}
+    -result {1 {4294967295 1 1}}
+}
+
+test bdd-6.1 {nthvar - wrong # args} {
+    -setup {bdd::system create sys}
+    -body {sys nthvar}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-6.2 {nthvar - bad var index} {
+    -setup {bdd::system create sys}
+    -body {sys nthvar a garbage}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -result {expected integer but got "garbage"}
+}
+
+test bdd-6.3 {nthvar - var 0} {
+    -setup {bdd::system create sys}
+    -body {sys nthvar a 0; sys dump a}
+    -cleanup {rename sys {}}
+    -result {2 {0 0 1} 0 {4294967295 0 0} 1 {4294967295 1 1}}
+}
+
+test bdd-6.4 {nthvar - two vars} {
+    -setup {bdd::system create sys}
+    -body {sys nthvar a 0; sys nthvar b 1; list [sys dump b] [sys dump a]}
+    -cleanup {rename sys {}}
+    -result {{3 {1 0 1} 0 {4294967295 0 0} 1 {4294967295 1 1}} {2 {0 0 1} 0 {4294967295 0 0} 1 {4294967295 1 1}}}
+}
+
+test bdd-6.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
+    -setup {bdd::system create sys}
+    -body {
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 0
+	list [sys beadindex a] [sys beadindex b] [sys beadindex c]
+    }
+    -cleanup {rename sys {}}
+    -result {2 3 2}
+}
+
+test bdd-7.1 {notnthvar - wrong # args} {
+    -setup {bdd::system create sys}
+    -body {sys notnthvar}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-7.2 {notnthvar - bad var index} {
+    -setup {bdd::system create sys}
+    -body {sys notnthvar a garbage}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -result {expected integer but got "garbage"}
+}
+
+test bdd-7.3 {notnthvar - var 0} {
+    -setup {bdd::system create sys}
+    -body {sys notnthvar !a 0; sys dump !a}
+    -cleanup {rename sys {}}
+    -result {2 {0 1 0} 1 {4294967295 1 1} 0 {4294967295 0 0}}
+}
+
+test bdd-7.4 {notnthvar - two vars} {
+    -setup {bdd::system create sys}
+    -body {
+	sys notnthvar !a 0; sys notnthvar !b 1
+	list [sys dump !b] [sys dump !a]
+    }
+    -cleanup {rename sys {}}
+    -result {{3 {1 1 0} 1 {4294967295 1 1} 0 {4294967295 0 0}} {2 {0 1 0} 1 {4294967295 1 1} 0 {4294967295 0 0}}}
+}
+
+test bdd-7.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
+    -setup {bdd::system create sys}
+    -body {
+	sys notnthvar !a 0; sys notnthvar !b 1; sys notnthvar !c 0
+	list [sys beadindex !a] [sys beadindex !b] [sys beadindex !c]
+    }
+    -cleanup {rename sys {}}
+    -result {2 3 2}
+}
+
+test bdd-8.2 {binary operator - bad first expr} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 0; sys notnthvar !b 0
+    }
+    -body {list [catch {sys & c garbage b} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-8.3 {binary operator - bad second expr} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 0; sys notnthvar !b 0
+    }
+    -body {list [catch {sys & c a garbage} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-8.4 {binary nor operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys nor c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys nor c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys nor c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys nor c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {0001 0010 0100 1000}
+}
+
+test bdd-8.5 {binary < operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys < c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys < c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys < c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys < c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {0100 1000 0001 0010}
+}
+
+test bdd-8.6 {binary > operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys > c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys > c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys > c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys > c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {0010 0001 1000 0100}
+}
+
+test bdd-8.7 {binary ^ operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys ^ c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys ^ c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys ^ c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys ^ c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {0110 1001 1001 0110}
+}
+
+test bdd-8.8 {binary nand operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys nand c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys nand c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys nand c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys nand c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {0111 1011 1101 1110}
+}
+test bdd-8.9 {binary & operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys & c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys & c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys & c !a b
+
+	lappend tables [truthtable [sys dump c] 2]
+	sys & c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {1000 0100 0010 0001}
+}
+
+test bdd-8.10 {binary == operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys == c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys == c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys == c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys == c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result  {1001 0110 0110 1001}
+}
+
+test bdd-8.11 {binary <= operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys <= c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys <= c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys <= c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys <= c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {1101 1110 0111 1011}
+}
+
+test bdd-8.12 {binary >= operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys >= c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys >= c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys >= c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys >= c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {1011 0111 1110 1101}
+}
+
+test bdd-8.13 {binary | operator} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	set tables {}
+	sys | c !a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys | c a !b
+	lappend tables [truthtable [sys dump c] 2]
+	sys | c !a b
+	lappend tables [truthtable [sys dump c] 2]
+	sys | c a b
+	lappend tables [truthtable [sys dump c] 2]
+	set tables
+    }
+    -cleanup {rename sys {}}
+    -result {1110 1101 1011 0111}
+}
+
+test bdd-9.1 {syllogism in the mode of barbara} {
+    -setup {
+	bdd::system create sys
+	sys nthvar man 0
+	sys nthvar mortal 1
+	sys nthvar socrates 2
+    }
+    -body {
+	sys <= major man mortal
+	sys <= minor socrates man
+	sys & conjunct major minor
+	sys <= conclusion socrates mortal
+	sys <= test0 major conclusion
+	sys <= test1 minor conclusion
+	sys <= test2 conjunct conclusion
+	list \
+	    [expr {[sys beadindex test0] == 1}] \
+	    [expr {[sys beadindex test1] == 1}] \
+	    [expr {[sys beadindex test2] == 1}] \
+	    [truthtable [sys dump conjunct] 3]
+    } 
+    -cleanup {rename sys {}}
+    -result {0 0 1 10110001}
 }
 
 cleanupTests

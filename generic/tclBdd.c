@@ -13,6 +13,7 @@
 
 #include <tcl.h>
 #include <tclOO.h>
+#include <tclTomMath.h>
 
 #include "tclBddInt.h"
 
@@ -88,13 +89,13 @@ typedef struct MethodTableRow {
  * Static functions defined within this file
  */
 
-static void SetNamedExpression(BddSystemData*, const char*, unsigned int);
+static void SetNamedExpression(BddSystemData*, Tcl_Obj*, BDD_BeadIndex);
 static Tcl_HashEntry* FindHashEntryForNamedExpression(Tcl_Interp*,
 						      BddSystemData*,
-						      const char*);
-static int FindNamedExpression(Tcl_Interp*, BddSystemData*, const char*,
-			       unsigned int*);
-static int UnsetNamedExpression(Tcl_Interp*, BddSystemData*, const char*);
+						      Tcl_Obj*);
+static int FindNamedExpression(Tcl_Interp*, BddSystemData*, Tcl_Obj*,
+			       BDD_BeadIndex*);
+static int UnsetNamedExpression(Tcl_Interp*, BddSystemData*, Tcl_Obj*);
 static void DeletePerInterpData(PerInterpData*);
 static int BddSystemConstructor(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
@@ -105,6 +106,8 @@ static int BddSystemBinopMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 static int BddSystemConstantMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemCopyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+			       int, Tcl_Obj* const[]);
+static int BddSystemDumpMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
 /* not yet there
 static int BddSystemNegateMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -179,6 +182,13 @@ const static Tcl_MethodType BddSystemCopyMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemDumpMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "copy",			   /* name */
+    BddSystemDumpMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 #if 0
 /* not yet there */
 const static Tcl_MethodType BddSystemNegateMethodType = {
@@ -244,6 +254,7 @@ MethodTableRow systemMethodTable[] = {
     { "beadindex", &BddSystemBeadindexMethodType, NULL },
     { "constant",  &BddSystemConstantMethodType,  NULL },
     { "copy",      &BddSystemCopyMethodType,      NULL },
+    { "dump",      &BddSystemDumpMethodType,      NULL },
     { "nand",      &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NAND },
     { "nor",       &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NOR },
     { "notnthvar", &BddSystemNotnthvarMethodType, NULL },
@@ -330,6 +341,7 @@ Bdd_Init(Tcl_Interp* interp)
 			    Tcl_NewMethod(interp, curClass, NULL, 0,
 					  &BddSystemConstructorType,
 					  (ClientData) pidata));
+    IncrPerInterpRefCount(pidata);
     for (methodPtr = systemMethodTable; methodPtr->name != NULL; ++methodPtr) {
 	Tcl_NewMethod(interp, curClass, Tcl_NewStringObj(methodPtr->name, -1),
 		      1, methodPtr->type, methodPtr->clientData);
@@ -410,10 +422,12 @@ BddSystemConstructor(
     IncrPerInterpRefCount(pidata);
     sdata->system = BDD_NewSystem(size);
     sdata->expressions = ckalloc(sizeof(Tcl_HashTable));
-    Tcl_InitHashTable(sdata->expressions, TCL_STRING_KEYS);
-    entryPtr = Tcl_CreateHashEntry(sdata->expressions, "0", &newFlag);
+    Tcl_InitObjHashTable(sdata->expressions);
+    entryPtr = Tcl_CreateHashEntry(sdata->expressions, pidata->literals[LIT_0],
+				   &newFlag);
     Tcl_SetHashValue(entryPtr, 0);
-    entryPtr = Tcl_CreateHashEntry(sdata->expressions, "1", &newFlag);
+    entryPtr = Tcl_CreateHashEntry(sdata->expressions, pidata->literals[LIT_1],
+				   &newFlag);
     Tcl_SetHashValue(entryPtr, 1);
     
     Tcl_ObjectSetMetadata(thisObject, &BddSystemDataType, (ClientData) sdata);
@@ -458,7 +472,7 @@ BddSystemBeadindexMethod(
 				/* The current system of expressions */
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
-    unsigned int beadIndex;	/* The bead index */
+    BDD_BeadIndex beadIndex;	/* The bead index */
 
     /* Check syntax */
 
@@ -466,7 +480,7 @@ BddSystemBeadindexMethod(
 	Tcl_WrongNumArgs(interp, skipped, objv, "name");
 	return TCL_ERROR;
     }
-    if (FindNamedExpression(interp, sdata, Tcl_GetString(objv[skipped]),
+    if (FindNamedExpression(interp, sdata, objv[skipped],
 			    &beadIndex) != TCL_OK) {
 	return TCL_ERROR;
     }
@@ -516,10 +530,9 @@ BddSystemBinopMethod(
 				/* The current system of expressions */
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
-    unsigned int beadIndexOpd1;	/* The bead index of the first operand */
-    unsigned int beadIndexOpd2;	/* The bead index of the second operand */
-    unsigned int beadIndexResult;
-				/* The bead index of the result */
+    BDD_BeadIndex beadIndexOpd1; /* The bead index of the first operand */
+    BDD_BeadIndex beadIndexOpd2; /* The bead index of the second operand */
+    BDD_BeadIndex beadIndexResult; /* The bead index of the result */
 
     /* Check syntax */
 
@@ -527,15 +540,15 @@ BddSystemBinopMethod(
 	Tcl_WrongNumArgs(interp, skipped, objv, "result operand1 operand2");
 	return TCL_ERROR;
     }
-    if (FindNamedExpression(interp, sdata, Tcl_GetString(objv[skipped+1]),
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
 			    &beadIndexOpd1) != TCL_OK
-	|| FindNamedExpression(interp, sdata, Tcl_GetString(objv[skipped+1]),
+	|| FindNamedExpression(interp, sdata, objv[skipped+2],
 			       &beadIndexOpd2) != TCL_OK) {
 	return TCL_ERROR;
     }
     beadIndexResult = BDD_Apply(sdata->system, (BDD_BinOp) (size_t)clientData,
 				beadIndexOpd1, beadIndexOpd2);
-    SetNamedExpression(sdata, Tcl_GetString(objv[skipped]), beadIndexResult);
+    SetNamedExpression(sdata, objv[skipped], beadIndexResult);
     BDD_UnrefBead(sdata->system, beadIndexResult);
     return TCL_OK;
 }
@@ -590,8 +603,7 @@ BddSystemConstantMethod(
     if (Tcl_GetBooleanFromObj(interp, objv[skipped+1], &boolval) != TCL_OK) {
 	return TCL_ERROR;
     }
-    SetNamedExpression(sdata, Tcl_GetString(objv[skipped]),
-		       (unsigned int) boolval);
+    SetNamedExpression(sdata, objv[skipped], (BDD_BeadIndex) boolval);
     return TCL_OK;
 }
 
@@ -634,7 +646,7 @@ BddSystemCopyMethod(
 				/* The current system of expressions */
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
-    unsigned int beadIndex;	/* The bead index for the old expression */
+    BDD_BeadIndex beadIndex;	/* The bead index for the old expression */
 
     /* Check syntax */
 
@@ -642,12 +654,70 @@ BddSystemCopyMethod(
 	Tcl_WrongNumArgs(interp, skipped, objv, "out in");
 	return TCL_ERROR;
     }
-    if (FindNamedExpression(interp, sdata, Tcl_GetString(objv[skipped+1]),
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
 			    &beadIndex) != TCL_OK) {
 	return TCL_ERROR;
     }
-    SetNamedExpression(sdata, Tcl_GetString(objv[skipped]), beadIndex);
+    SetNamedExpression(sdata, objv[skipped], beadIndex);
     return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemDumpMethod --
+ *
+ *	Dumps the internal representation of a named expression
+ *
+ * Usage:
+ *	$system dump name
+ *
+ * Parameters:
+ *	name - Name of the expression
+ *
+ * Results:
+ *	Returns a dictionary whose keys are states and whose values are
+ *	triples {variable# nextStateIfFalse nextStateIfTrue}. The triples
+ *	are placed in the list in depth-first order.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemDumpMethod(
+    ClientData clientData,	/* unused */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex beadIndex;	/* The bead index */
+    Tcl_Obj* result;		/* The result dictionary */
+    int status;			/* Tcl status return */
+
+    /* Check syntax */
+
+    if (objc != skipped+1) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped],
+			    &beadIndex) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    result = Tcl_NewObj();
+    status = BDD_Dump(interp, result, sdata->system, beadIndex);
+    if (status == TCL_OK) {
+	Tcl_SetObjResult(interp, result);
+    }
+    return status;
 }
 
 /*
@@ -691,8 +761,8 @@ BddSystemNegateMethod(
 				/* The current system of expressions */
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
-    unsigned int operandIndex;	/* The bead index for the operand expression */
-    unsigned int resultIndex;	/* The bead index for the result expression */
+    BDD_BeadIndex operandIndex;	/* The bead index for the operand expression */
+    BDD_BeadIndex resultIndex;	/* The bead index for the result expression */
 
     /* Check syntax */
 
@@ -700,12 +770,12 @@ BddSystemNegateMethod(
 	Tcl_WrongNumArgs(interp, skipped, objv, "result operand");
 	return TCL_ERROR;
     }
-    if (FindNamedExpression(interp, sdata, Tcl_GetString(objv[skipped+1]),
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
 			    &operandIndex) != TCL_OK) {
 	return TCL_ERROR;
     }
     resultIndex = BDD_Negate(sdata->system, operandIndex);
-    SetNamedExpression(sdata, Tcl_GetString(objv[skipped]), resultIndex);
+    SetNamedExpression(sdata, objv[skipped], resultIndex);
     return TCL_OK;
 }
 #endif
@@ -749,8 +819,7 @@ BddSystemNthvarMethod(
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
     int varNum;			/* The variable number */
-    unsigned int beadIndex;	/* The bead index for the old expression */
-    Tcl_Obj* errorMessage;	/* Error message to return on failure */
+    BDD_BeadIndex beadIndex;	/* The bead index for the old expression */
 
     /* Check syntax */
 
@@ -761,20 +830,8 @@ BddSystemNthvarMethod(
     if (Tcl_GetIntFromObj(interp, objv[skipped+1], &varNum) != TCL_OK) {
 	return TCL_ERROR;
     }
-    if (varNum < 0 || varNum >= BDD_GetVariableCount(sdata->system)) {
-	errorMessage = Tcl_ObjPrintf("invalid variable index %d, must be "
-				     "between 0 and %u", varNum,
-				     BDD_GetVariableCount(sdata->system)-1);
-	Tcl_SetObjResult(interp, errorMessage);
-	errorMessage = Tcl_ObjPrintf("%d", varNum);
-	Tcl_IncrRefCount(errorMessage);
-	Tcl_SetErrorCode(interp, "BDD", "BadVarIndex",
-			 Tcl_GetString(errorMessage), NULL);
-	Tcl_DecrRefCount(errorMessage);
-	return TCL_ERROR;
-    }
-    beadIndex = BDD_NthVariable(sdata->system, (unsigned int) varNum);
-    SetNamedExpression(sdata, Tcl_GetString(objv[skipped]), beadIndex);
+    beadIndex = BDD_NthVariable(sdata->system, (BDD_VariableIndex) varNum);
+    SetNamedExpression(sdata, objv[skipped], beadIndex);
     return TCL_OK;
 }
 
@@ -817,8 +874,7 @@ BddSystemNotnthvarMethod(
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
     int varNum;			/* The variable number */
-    unsigned int beadIndex;	/* The bead index for the old expression */
-    Tcl_Obj* errorMessage;	/* Error message to return on failure */
+    BDD_BeadIndex beadIndex;	/* The bead index for the old expression */
 
     /* Check syntax */
 
@@ -829,20 +885,109 @@ BddSystemNotnthvarMethod(
     if (Tcl_GetIntFromObj(interp, objv[skipped+1], &varNum) != TCL_OK) {
 	return TCL_ERROR;
     }
-    if (varNum < 0 || varNum >= BDD_GetVariableCount(sdata->system)) {
-	errorMessage = Tcl_ObjPrintf("invalid variable index %d, must be "
-				     "between 0 and %u", varNum,
-				     BDD_GetVariableCount(sdata->system)-1);
-	Tcl_SetObjResult(interp, errorMessage);
-	errorMessage = Tcl_ObjPrintf("%d", varNum);
-	Tcl_IncrRefCount(errorMessage);
-	Tcl_SetErrorCode(interp, "BDD", "BadVarIndex",
-			 Tcl_GetString(errorMessage), NULL);
-	Tcl_DecrRefCount(errorMessage);
+    beadIndex = BDD_NotNthVariable(sdata->system, (BDD_VariableIndex) varNum);
+    SetNamedExpression(sdata, objv[skipped], beadIndex);
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemSatcountMethod --
+ *
+ *	Computes and returns the number of satisfying assignments for
+ *      a named expression in a system of BDD's
+ *
+ * Usage:
+ *	$system satcount name
+ *
+ * Parameters:
+ *	name - The name of the expression to analyze
+ *
+ * Results:
+ *	Returns the count of satifsying assignments as a Tcl result
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemSatcountMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex beadIndex;	/* The bead index for the old expression */
+    mp_int satCount;
+
+    /* Check syntax */
+
+    if (objc != skipped+1) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name");
 	return TCL_ERROR;
     }
-    beadIndex = BDD_NotNthVariable(sdata->system, (unsigned int) varNum);
-    SetNamedExpression(sdata, Tcl_GetString(objv[skipped]), beadIndex);
+    if (FindNamedExpression(interp, sdata, objv[skipped],
+			    &beadIndex) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    mp_init(&satCount);
+    BDD_SatCount(sdata->system, beadIndex, &satCount);
+    Tcl_SetObjResult(interp, Tcl_NewBignumObj(&satCount));
+
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemUnsetMethod --
+ *
+ *	Forgets a named expression
+ *
+ * Usage:
+ *	$system unset name
+ *
+ * Parameters:
+ *	name - Name of the expression
+ *
+ * Results:
+ *	None. Attempting to unset an expression that does not exist is
+ *	ignored silently
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemUnsetMethod(
+    ClientData clientData,	/* unused */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+
+    /* Check syntax */
+
+    if (objc != skipped+1) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name");
+	return TCL_ERROR;
+    }
+    UnsetNamedExpression(interp, sdata, objv[skipped]);
     return TCL_OK;
 }
 
@@ -927,17 +1072,17 @@ CloneMethod(Tcl_Interp* interp,	/* Tcl interpreter */
 static void
 SetNamedExpression(
     BddSystemData* sdata,	/* System of BDD's */
-    const char* name,		/* Name of the expression */
-    unsigned int beadIndex)	/* Bead index */
+    Tcl_Obj* name,		/* Name of the expression */
+    BDD_BeadIndex beadIndex)	/* Bead index */
 {
-    unsigned int oldBeadIndex = 0;
+    BDD_BeadIndex oldBeadIndex = 0;
 				/* Previous bead index */
     int newFlag;		/* Flag == 1 if this is the first use of
 				 * the name */
     Tcl_HashEntry* entryPtr = Tcl_CreateHashEntry(sdata->expressions, name,
 						  &newFlag);
     if (!newFlag) {
-	oldBeadIndex = (unsigned int) (size_t) Tcl_GetHashValue(entryPtr);
+	oldBeadIndex = (BDD_BeadIndex) (size_t) Tcl_GetHashValue(entryPtr);
     }
     BDD_IncrBeadRefCount(sdata->system, beadIndex);
     Tcl_SetHashValue(entryPtr, (ClientData) (size_t)beadIndex);
@@ -965,7 +1110,7 @@ static Tcl_HashEntry*
 FindHashEntryForNamedExpression(
     Tcl_Interp* interp,		/* Tcl interpreter */
     BddSystemData* sdata,	/* System data for the BDD system */
-    const char* name)		/* Name of the expression */
+    Tcl_Obj* name)		/* Name of the expression */
 {
     Tcl_HashEntry* entryPtr = Tcl_FindHashEntry(sdata->expressions, name);
     Tcl_Obj* errorMessage;	/* Error message */
@@ -973,10 +1118,11 @@ FindHashEntryForNamedExpression(
     if (entryPtr == NULL) {
 	if (interp != NULL) {
 	    errorMessage = Tcl_NewStringObj("expression named \"", -1);
-	    Tcl_AppendToObj(errorMessage, name, -1);
+	    Tcl_AppendToObj(errorMessage, Tcl_GetString(name), -1);
 	    Tcl_AppendToObj(errorMessage, "\" not found", -1);
 	    Tcl_SetObjResult(interp, errorMessage);
-	    Tcl_SetErrorCode(interp, "BDD", "ExprNotFound", name, -1);
+	    Tcl_SetErrorCode(interp, "BDD", "ExprNotFound", 
+			     Tcl_GetString(name), NULL);
 	}
     }
     return entryPtr;
@@ -1004,15 +1150,16 @@ static int
 FindNamedExpression(
     Tcl_Interp* interp,		/* Tcl interpreter */
     BddSystemData* sdata,	/* Data about the BDD system */
-    const char* name,		/* Name of the expression */
-    unsigned int* beadIndexPtr)	/* OUTPUT: Index of the bead */
+    Tcl_Obj* name,		/* Name of the expression */
+    BDD_BeadIndex* beadIndexPtr)
+				/* OUTPUT: Index of the bead */
 {
     Tcl_HashEntry* entryPtr = 
 	FindHashEntryForNamedExpression(interp, sdata, name);
     if (entryPtr == NULL) {
 	return TCL_ERROR;
     } else {
-	*beadIndexPtr = (unsigned int) (size_t) Tcl_GetHashValue(entryPtr);
+	*beadIndexPtr = (BDD_BeadIndex) (size_t) Tcl_GetHashValue(entryPtr);
 	return TCL_OK;
     }
 }
@@ -1040,7 +1187,7 @@ static int
 UnsetNamedExpression(
     Tcl_Interp* interp,		/* Tcl interpreter */
     BddSystemData* sdata,	/* Data about the BDD system */
-    const char* name)		/* Name of the expression */
+    Tcl_Obj* name)		/* Name of the expression */
 {
     Tcl_HashEntry* entryPtr = 
 	FindHashEntryForNamedExpression(interp, sdata, name);
@@ -1048,7 +1195,7 @@ UnsetNamedExpression(
 	return TCL_ERROR;
     } else {
 	BDD_UnrefBead(sdata->system,
-		      (unsigned int) (size_t)Tcl_GetHashValue(entryPtr));
+		      (BDD_BeadIndex) (size_t)Tcl_GetHashValue(entryPtr));
 	Tcl_DeleteHashEntry(entryPtr);
 	return TCL_OK;
     }
