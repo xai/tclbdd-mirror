@@ -115,10 +115,8 @@ static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemNthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
-/* not yet there
 static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
-*/
 static int BddSystemSatcountMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemUnsetMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -208,8 +206,6 @@ const static Tcl_MethodType BddSystemNthvarMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
-#if 0
-/* not yet there */
 const static Tcl_MethodType BddSystemRestrictMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "restrict",			   /* name */
@@ -217,7 +213,6 @@ const static Tcl_MethodType BddSystemRestrictMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
-#endif
 const static Tcl_MethodType BddSystemSatcountMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "satcount",			   /* name */
@@ -254,9 +249,7 @@ MethodTableRow systemMethodTable[] = {
     { "nor",       &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NOR },
     { "notnthvar", &BddSystemNotnthvarMethodType, NULL },
     { "nthvar",    &BddSystemNthvarMethodType,    NULL },
-    /* not yet there
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
-    */
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
@@ -883,6 +876,96 @@ BddSystemNotnthvarMethod(
     beadIndex = BDD_NotNthVariable(sdata->system, (BDD_VariableIndex) varNum);
     SetNamedExpression(sdata, objv[skipped], beadIndex);
     BDD_UnrefBead(sdata->system, beadIndex);
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemRestrictMethod --
+ *
+ *	Computes a BDD restricted to a particular set of variable values
+ *
+ * Usage:
+ *	$system restrict name expr r1 r2 ...
+ *
+ * Parameters:
+ *	name - The name to assign
+ *	expr - The expression to restrict
+ *	r1 r2 ... - Restrictions. The restrictions must be named expressions
+ *                  resulting from 'nthvar' or 'notnthvar' (or other
+ *                  expressions representing a single, possibly negated,
+ *		    literal.
+ *
+ * Results:
+ *	None
+ *
+ * Side effects:
+ *	Assigns the negation of the given variable to the new name
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemRestrictMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex expr;		/* The expression to restrict */
+    BDD_VariableIndex nRestrictions;
+				/* How many restrictions? */
+    BDD_ValueAssignment* restrictions;
+    int i;
+    BDD_VariableIndex j;
+    BDD_BeadIndex literalIndex;
+    Tcl_Obj* errorMessage;
+    BDD_BeadIndex result;
+    
+    /* Check syntax */
+
+    if (objc < skipped+2) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name expr ?restriction?...");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
+			    &expr) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    if (objc >= skipped+3) {
+	nRestrictions = objc-skipped-2;
+	restrictions = (BDD_ValueAssignment*)
+	    ckalloc(nRestrictions * sizeof(BDD_ValueAssignment));;
+	for (i = skipped+2, j = 0; i < objc; ++i, ++j) {
+	    /* TODO - Refactor into FindLiteral and FindLiteralList */
+	    if (FindNamedExpression(interp, sdata, objv[i],
+				    &literalIndex) != TCL_OK) {
+		ckfree(restrictions);
+		return TCL_ERROR;
+	    }
+	    if (!BDD_Literal(sdata->system, literalIndex, restrictions+j)) {
+		errorMessage = Tcl_ObjPrintf("%s is not a literal",
+					     Tcl_GetString(objv[i]));
+		Tcl_SetObjResult(interp, errorMessage);
+		Tcl_SetErrorCode(interp, "BDD", "NotLiteral",
+				 Tcl_GetString(objv[i]));
+		ckfree(restrictions);
+		return TCL_ERROR;
+	    }
+	}
+	result = BDD_Restrict(sdata->system, expr, restrictions, nRestrictions);
+	SetNamedExpression(sdata, objv[skipped], result);
+	BDD_UnrefBead(sdata->system, result);
+    }
     return TCL_OK;
 }
 

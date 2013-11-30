@@ -70,16 +70,21 @@ typedef unsigned int BDD_VariableIndex;
 				 * it's hard to imagine more than 
 				 * an 'unsigned int' worth. */
 
+/*
+ * Value assignment: used in making conjunctions and restrictions,
+ * and in reporting out satisfying expressions.
+ */
+typedef struct BDD_ValueAssignment {
+    BDD_VariableIndex var;	/* Variable */
+    int value;			/* Boolean value */
+} BDD_ValueAssignment;
+
 #define BDDAPI /* TODO: work out the export gubbins */
 
 extern BDDAPI BDD_System* BDD_NewSystem(BDD_BeadIndex n);
 extern BDDAPI void BDD_SetVariableCount(BDD_System* sysPtr,
 					BDD_VariableIndex n);
 extern BDDAPI BDD_VariableIndex BDD_GetVariableCount(BDD_System* sysPtr);
-extern BDDAPI BDD_BeadIndex BDD_NthVariable(BDD_System* sysPtr,
-					    BDD_VariableIndex n);
-extern BDDAPI BDD_BeadIndex BDD_NotNthVariable(BDD_System* sysPtr,
-					       BDD_VariableIndex n);
 extern BDDAPI BDD_BeadIndex BDD_MakeBead(BDD_System* sysPtr,
 					 BDD_VariableIndex level,
 					 BDD_BeadIndex low,
@@ -87,9 +92,19 @@ extern BDDAPI BDD_BeadIndex BDD_MakeBead(BDD_System* sysPtr,
 extern BDDAPI void BDD_IncrBeadRefCount(BDD_System* sysPtr, 
 					BDD_BeadIndex bead);
 extern BDDAPI void BDD_UnrefBead(BDD_System* sysPtr, BDD_BeadIndex bead);
+extern BDDAPI BDD_BeadIndex BDD_NthVariable(BDD_System* sysPtr,
+					    BDD_VariableIndex n);
+extern BDDAPI BDD_BeadIndex BDD_NotNthVariable(BDD_System* sysPtr,
+					       BDD_VariableIndex n);
+extern BDDAPI int BDD_Literal(BDD_System* sysPtr, BDD_BeadIndex expr,
+			      BDD_ValueAssignment* assignPtr);
 extern BDDAPI BDD_BeadIndex BDD_Negate(BDD_System* sysPtr, BDD_BeadIndex u);
 extern BDDAPI BDD_BeadIndex BDD_Apply(BDD_System* sysPtr, BDD_BinOp op,
 				      BDD_BeadIndex u1, BDD_BeadIndex u2);
+extern BDDAPI BDD_BeadIndex BDD_Restrict(BDD_System* sysPtr,
+					 BDD_BeadIndex u,
+					 const BDD_ValueAssignment r[],
+					 BDD_VariableIndex n);
 extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
 extern BDDAPI int BDD_Dump(Tcl_Interp*, Tcl_Obj*, BDD_System*, BDD_BeadIndex);

@@ -834,6 +834,26 @@ test bdd-12.11 {satcount - parity tree} {
     -result {257 80000000000000000000000000000000}
 }
 
+test bdd-13.n {restrict - reduce to constant} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+    }
+    -body {
+	sys & r1 a b
+	sys & r1 r1 c
+	sys restrict r1 r1 a b
+	sys restrict r2 r1 c
+	sys beadindex r2
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result 1
+}
+
 cleanupTests
 return
 

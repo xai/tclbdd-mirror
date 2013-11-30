@@ -852,6 +852,54 @@ BDD_NotNthVariable(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_Literal --
+ *
+ *	Tests if a BDD represents a single (possibly negated) literal
+ *	and returns informatin about the literal if so.
+ *
+ * Results:
+ *	Returns 1 if the BDD represents a literal and 0 if it does not.
+ *
+ * Side effects:
+ *	If assignPtr is not NULL, sets *assignPtr to the variable index
+ *	and value of the literal. A value of 1 is not negated; a value
+ *	of 0 is negated.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+int
+BDD_Literal(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex expr,		/* Expression to test */
+    BDD_ValueAssignment* assignPtr)
+				/* Description of the literal */
+{
+    /*
+     * Constants are not literals
+     */
+    if (expr <= 1) {
+	return 0;
+    }
+
+    /*
+     * Literals have both next stats constant
+     */
+    Bead* beadPtr = sysPtr->beads + expr;
+    if (beadPtr->high > 1 || beadPtr->low > 1) {
+	return 0;
+    }
+
+    if (assignPtr) {
+	assignPtr->var = beadPtr->level;
+	assignPtr->value = beadPtr->high;
+    }
+    return 1;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_Negate --
  *
  *	Computes the negation of a BDD.
@@ -873,6 +921,7 @@ Negate(
     int newFlag;		/* Flag == 1 if no precomputed negation found */
     Bead* uPtr = sysPtr->beads+u;
 				/* Pointer to the bead data */
+    BDD_BeadIndex l, h;		/* Low and high transitions of the result */
     BDD_BeadIndex result;	/* Resulting BDD */
 
     /*
@@ -887,9 +936,11 @@ Negate(
 	result = !u;
 	++sysPtr->beads[result].refCount;
     } else {
-	result = BDD_MakeBead(sysPtr, uPtr->level,
-			      Negate(H, sysPtr, uPtr->low),
-			      Negate(H, sysPtr, uPtr->high));
+	l = Negate(H, sysPtr, uPtr->low);
+	h = Negate(H, sysPtr, uPtr->high);
+	result = BDD_MakeBead(sysPtr, uPtr->level, l, h);
+	BDD_UnrefBead(sysPtr, l);
+	BDD_UnrefBead(sysPtr, h);
     }
     Tcl_SetHashValue(entryPtr, (ClientData) result);
     return result;
@@ -942,6 +993,8 @@ Apply(
 				 * left-hand bead */
     BDD_BeadIndex low2, high2;	/* Low and high transitions of the
 				 * right-hand bead*/
+
+    BDD_BeadIndex l, h;	        /* Low and high transitions of the result */
     int newFlag;		/* Flag==1 if the output is a new bead */
     BDD_BeadIndex result;	/* Return value */
     Tcl_HashEntry* entry;	/* Pointer to the entry in the
@@ -957,32 +1010,31 @@ Apply(
 	unsigned int i = ((unsigned int)u1 << 1) + (unsigned int)u2;
 	result = ((op>>i) & 1);
 	++sysPtr->beads[result].refCount;
-    } else if (u1Ptr->level == u2Ptr->level) {
-	level = u1Ptr->level;
-	low1 = u1Ptr->low;
-	high1 = u1Ptr->high;
-	low2 = u2Ptr->low;
-	high2 = u2Ptr->high;
-	result = BDD_MakeBead(sysPtr,
-			      level,
-			      Apply(sysPtr, G, op, low1, low2),
-			      Apply(sysPtr, G, op, high1, high2));
-    } else if (u1Ptr->level < u2Ptr->level) {
-	level = u1Ptr->level;
-	low1 = u1Ptr->low;
-	high1 = u1Ptr->high;
-	result = BDD_MakeBead(sysPtr,
-			      level,
-			      Apply(sysPtr, G, op, low1, u2),
-			      Apply(sysPtr, G, op, high1, u2));
-    } else /* u1Ptr->level > u2Ptr->level */ {
-	level = u2Ptr->level;
-	low2 = u2Ptr->low;
-	high2 = u2Ptr->high;
-	result = BDD_MakeBead(sysPtr,
-			      level,
-			      Apply(sysPtr, G, op, u1, low2),
-			      Apply(sysPtr, G, op, u1, high2));
+    } else {
+	if (u1Ptr->level == u2Ptr->level) {
+	    level = u1Ptr->level;
+	    low1 = u1Ptr->low;
+	    high1 = u1Ptr->high;
+	    low2 = u2Ptr->low;
+	    high2 = u2Ptr->high;
+	    l = Apply(sysPtr, G, op, low1, low2);
+	    h = Apply(sysPtr, G, op, high1, high2);
+	} else if (u1Ptr->level < u2Ptr->level) {
+	    level = u1Ptr->level;
+	    low1 = u1Ptr->low;
+	    high1 = u1Ptr->high;
+	    l = Apply(sysPtr, G, op, low1, u2);
+	    h = Apply(sysPtr, G, op, high1, u2);
+	} else /* u1Ptr->level > u2Ptr->level */ {
+	    level = u2Ptr->level;
+	    low2 = u2Ptr->low;
+	    high2 = u2Ptr->high;
+	    l = Apply(sysPtr, G, op, u1, low2);
+	    h = Apply(sysPtr, G, op, u1, high2);
+	}
+	result = BDD_MakeBead(sysPtr, level, l, h);
+	BDD_UnrefBead(sysPtr, l);
+	BDD_UnrefBead(sysPtr, h);
     }
     Tcl_SetHashValue(entry, result);
     return result;
@@ -1000,6 +1052,110 @@ BDD_Apply(
     BDD_BeadIndex entry = Apply(sysPtr, &G, op, u1, u2);
     Tcl_DeleteHashTable(&G);
     return entry;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_Restrict --
+ *
+ *	Simplifies a BDD by restricting the values of certain variables
+ *	to 0 or 1.
+ *
+ * Results:
+ *	Returns the restricted BDD. Refcount must be decremented by
+ *	the caller when the caller is done with the BDD.
+ *
+ * Notes:
+ *	The restrictions must be listed in ascending order by variable
+ *	number.
+ *
+ *-----------------------------------------------------------------------------
+ */
+static BDD_BeadIndex
+Restrict(
+    Tcl_HashTable* H,		/* Hash table of precomputed values */
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u,		/* BDD to restrict */
+    const BDD_ValueAssignment r[], 
+				/* Restrictions to apply */
+    BDD_VariableIndex n)	/* Number of restrictions */
+{
+    int newFlag;		/* Flag = 1 if we have not seen u yet */
+    Tcl_HashEntry* entryPtr;	/* Hash entry for u in precomputed values */
+    BDD_BeadIndex l, h;		/* low and high branches of the resulting BDD */
+    BDD_BeadIndex result;	/* Returned BDD */
+    
+    /* Handle tautologies and empty restriction sets */
+
+    if (n == 0 || u <= 1) {
+	++sysPtr->beads[u].refCount;
+	return u;
+    }
+
+    /* Has this value been computed already? */
+
+    entryPtr = Tcl_CreateHashEntry(H, u, &newFlag);
+    if (newFlag) {
+	Tcl_SetHashValue(entryPtr, 0);
+    }
+    BDD_BeadIndex cached = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
+    if (cached != 0) {
+	++sysPtr->beads[cached].refCount;
+	return cached;
+    }
+
+    /*
+     * Value is not cached. Handle the first variable of the restriction
+     */
+    BDD_BeadIndex rvar = r[0].var;
+    BDD_BeadIndex uvar = sysPtr->beads[u].level;
+    if (rvar < uvar) {
+	/*
+	 * r[0] is an irrelevant variable in u
+	 */
+	result = Restrict(H, sysPtr, u, r+1, n-1);
+    } else if (rvar == uvar) {
+	/*
+	 * r[0] appears in u. Bind it.
+	 */
+	if (r[0].value) {
+	    result = Restrict(H, sysPtr, sysPtr->beads[u].high, r+1, n-1);
+	} else {
+	    result = Restrict(H, sysPtr, sysPtr->beads[u].low, r+1, n-1);
+	}
+    } else /* rvar > uvar */ {
+	/*
+	 * u's first variable is unrestricted. Apply the restriction to both
+	 * successors of u, and make a bead for the restricted expression.
+	 */
+	l = Restrict(H, sysPtr, sysPtr->beads[u].low, r, n);
+	h = Restrict(H, sysPtr, sysPtr->beads[u].high, r, n);
+	result = BDD_MakeBead(sysPtr, uvar, l, h);
+	BDD_UnrefBead(sysPtr, l);
+	BDD_UnrefBead(sysPtr, h);
+    }
+
+    /*
+     * Cache the result
+     */
+    Tcl_SetHashValue(entryPtr, (ClientData) result);
+    return result;
+}
+BDD_BeadIndex
+BDD_Restrict(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u,		/* BDD to restrict */
+    const BDD_ValueAssignment r[],
+				/* Restrictions to apply */
+    BDD_VariableIndex n)	/* Count of restrictions */
+{
+    Tcl_HashTable H;		/* Cache of partial results */
+    BDD_BeadIndex result;	/* Bead index of the result */
+    Tcl_InitHashTable(&H, TCL_ONE_WORD_KEYS);
+    result = Restrict(&H, sysPtr, u, r, n);
+    Tcl_DeleteHashTable(&H);
+    return result;
 }
 
 /*
