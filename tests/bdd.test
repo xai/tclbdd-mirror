@@ -834,6 +834,102 @@ test bdd-12.11 {satcount - parity tree} {
     -result {257 80000000000000000000000000000000}
 }
 
+test bdd-12.12 {eight queens} {*}{
+    -setup {
+	bdd::system create sys
+	for {set i 0} {$i < 64} {incr i} {
+	    sys nthvar v$i $i; sys notnthvar !v$i $i
+	}
+    }
+    -body {
+
+	set result {}
+
+	sys constant solution 1
+
+	# iterate through the cells
+
+	for {set row 0} {$row < 8} {incr row} {
+	    sys constant thisRowC 1
+	    for {set col 7} {$col >= 0} {incr col -1} {
+		sys constant cellC 1
+		set q1 v[expr {8* $row + $col}]
+
+		# queen here <= no other queen in the same column
+
+		sys constant columnC 1
+		for {set col2 7} {$col2 >= 0} {incr col2 -1} {
+		    if {$col2 != $col} {
+			set q2 v[expr {8 * $row + $col2}]
+			sys & columnC columnC !$q2
+		    }
+		}
+		sys <= columnC $q1 columnC
+		sys & cellC cellC columnC
+		
+		# queen here <= no other queen in the same row
+
+		sys constant rowC 1
+		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
+		    if {$row2 != $row} {
+			set q2 v[expr {8 * $row2 + $col}]
+			sys & rowC rowC !$q2
+		    }
+		}
+		sys <= rowC $q1 rowC
+		sys & cellC cellC rowC
+
+		# queen here <= no other queen in the same diagonal
+
+		sys constant diag1C 1
+		sys constant diag2C 1
+		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
+		    if {$row2 != $row} {
+			set col2 [expr {$col + $row2 - $row}]
+			if {$col2 >= 0 && $col2 < 8} {
+			    set q2 v[expr {8 * $row2 + $col2}]
+			    sys & diag1C diag1C !$q2
+			}
+			set col2 [expr {$col + $row - $row2}]
+			if {$col2 >= 0 && $col2 < 8} {
+			    set q2 v[expr {8 * $row2 + $col2}]
+			    sys & diag2C diag2C !$q2
+			}
+		    }
+		}
+		sys <= diag1C $q1 diag1C
+		sys & cellC cellC diag1C
+
+		sys <= diag2C $q1 diag2C
+		sys & cellC cellC diag2C
+
+		# accumulate into the constraint set for the row
+
+		sys & thisRowC thisRowC cellC
+	    }
+
+	    # accumulate all constraints for a row into the solution
+
+	    sys & solution solution thisRowC
+	}
+		
+	# at least one queen in each column
+	for {set col 0} {$col < 8} {incr col} {
+	    sys constant columnC 0
+	    for {set row 0} {$row < 8} {incr row} {
+		set q v[expr {8*$row + $col}]
+		sys | columnC columnC $q
+	    }
+	    sys & solution solution columnC
+	}
+
+	sys satcount solution
+
+    }
+    -cleanup {rename sys {}}
+    -result 92
+}
+
 test bdd-13.n {restrict - reduce to constant} {*}{
     -setup {
 	bdd::system create sys
