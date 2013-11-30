@@ -971,16 +971,12 @@ test bdd-12.13 {verification of a full adder} {
 	    sys & input $cilit $ylit
 	    sys & input input $xlit
 	    if {$co} {
-		puts "spec co |= $xlit & $ylit & $cilit"
 		sys | spec_co spec_co input
 	    }
 	    if {$z} {
-		puts "spec z |= $xlit & $ylit & $cilit"
 		sys | spec_z spec_z input
 	    }
 	}
-
-	puts "[sys satcount spec_co] [sys satcount spec_z]"
 
 	# implementation is a gate array
 	sys & gate1 x y
@@ -989,7 +985,6 @@ test bdd-12.13 {verification of a full adder} {
 	sys ^ z gate2 ci
 	sys | co gate1 gate3
 
-	puts "[sys satcount co] [sys satcount z]"
 	list [expr {[sys beadindex co] == [sys beadindex spec_co]}] \
 	    [expr {[sys beadindex z] == [sys beadindex spec_z]}]
     }
