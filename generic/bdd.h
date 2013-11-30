@@ -56,6 +56,7 @@ typedef enum {			/* !a!b !ab a!b ab */
 } BDD_BinOp;
 
 typedef struct BDD_System BDD_System;
+typedef struct BDD_AllSatState BDD_AllSatState;
 
 /* Type of a bead index */
 
@@ -107,6 +108,12 @@ extern BDDAPI BDD_BeadIndex BDD_Restrict(BDD_System* sysPtr,
 					 BDD_VariableIndex n);
 extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
+extern BDDAPI BDD_AllSatState* BDD_AllSatStart(BDD_System* sysPtr,
+					       BDD_BeadIndex u);
+extern BDDAPI int BDD_AllSatNext(BDD_AllSatState* state,
+				 BDD_ValueAssignment** vPtr,
+				 int* nPtr);
+extern BDDAPI int BDD_AllSatFinish(BDD_AllSatState*);
 extern BDDAPI int BDD_Dump(Tcl_Interp*, Tcl_Obj*, BDD_System*, BDD_BeadIndex);
 extern BDDAPI void BDD_DeleteSystem(BDD_System* sysPtr);
 

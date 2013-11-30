@@ -1263,6 +1263,214 @@ BDD_SatCount(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_AllSatStart --
+ *
+ *	Begins a traversal of a BDD for all satisfying variable assignments
+ *
+ * Results:
+ *	Returns a pointer to a state vector that manages the state
+ *	of the traversal. The state vector must be passed to BDD_AllSatNext
+ *	to retrieve each variable assignment, and to BDD_AllSatFinish
+ *	at the end of the traversal or when the traversal is abandoned.
+ *
+ * It is a pointer smash to dispose of a BDD_System while traversing one of
+ * its BDD's.
+ *
+ *-----------------------------------------------------------------------------
+ */
+BDD_AllSatState*
+BDD_AllSatStart(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u)		/* BDD to traverse */
+{
+
+    /*
+     * Allocate the state vector
+     */
+    BDD_AllSatState* stateVector =
+	(BDD_AllSatState*) ckalloc(sizeof(BDD_AllSatState));
+    BDD_VariableIndex nVars = BDD_GetVariableCount(sysPtr);
+
+    /*
+     * Allocate the stacks
+     */
+    stateVector->sysPtr = sysPtr;
+    stateVector->uStack = (BDD_BeadIndex*)
+	ckalloc(nVars * sizeof(BDD_BeadIndex));
+    stateVector->sStack = (unsigned char*)
+	ckalloc(nVars);
+    stateVector->v = (BDD_ValueAssignment*)
+	ckalloc(nVars * sizeof(BDD_ValueAssignment));
+
+    /*
+     * Store the initial state, in which the top of the expression
+     * is on the stack and the stack depth is 1, with the first
+     * action being to explore the expression's left hand side.
+     */
+
+    stateVector->uStack[0] = u;
+    ++sysPtr->beads[u].refCount;
+    stateVector->sStack[0] = BDD_ALLSAT_START;
+    stateVector->depth = 1;
+
+    return stateVector;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_AllSat_Next --
+ *
+ *	Retrieves the next satisfying assignment from an iterator over
+ *	a BDD
+ *
+ * Results:
+ *	Returns 1 if there was a satisfying assignment, 0 at the end of
+ *	the iterator.
+ *
+ * Side effects:
+ *	Stores the literals of the satisfying assignment in *v and 
+ *	the count of the literals in *n.
+ *
+ * Irrelevant variables are omitted from the vector. The vector is
+ * usable until the next call to BDD_AllSat_Next, or a call to BDD_AllSat_Finish
+ *
+ * It is necessary to call BDD_AllSat_Finish to dispose of the state
+ * vector, even after this function has returned 0.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+int
+BDD_AllSat_Next(
+    BDD_AllSatState* stateVector,
+				/* State vector from BDD_AllSat_Start */
+    BDD_ValueAssignment **vPtr, /* OUTPUT: Vector of satisfying literals */
+    BDD_VariableIndex *nPtr)	/* OUTPUT: Count of satisfying literals */
+{
+    BDD_System* sysPtr = stateVector->sysPtr;
+				/* System of BDD's */
+    BDD_VariableIndex depth = stateVector->depth;
+				/* Depth of the stack */
+    BDD_BeadIndex u;		/* Current bead */
+    unsigned char s;		/* Current state */
+	
+    for (;;) {
+
+	/*
+	 * Initially, BDD_AllSat_Start will have pushed the starting
+	 * bead and the BDD_ALLSAT_START state onto the stack, and this
+	 * code will pop it again. After reporting a variable assignment
+	 * and re-entering this procedure, the top of stack will be
+	 * the last bead prior to the 1, and the BDD_ALLSAT_SECONDTRY
+	 * or BDD_ALLSAT_RETURN according to whether the next action
+	 * is to explore the bead's 'high' transition or to retreat to
+	 * the bead's predecessor.
+	 *
+	 * We also arrive at this point from the bottom of the loop,
+	 * in which case u designates the 0 leaf bead, and we want
+	 * to unwind the stack in the same way.
+	 */
+
+	/*
+	 * Pop the state off the stack
+	 */
+	do {
+	    if (depth == 0) {
+		/*
+		 * When the entire stack is unwound, the BDD has been fully
+		 * traversed.
+		 */
+		return 0;
+	    }
+	    --depth;
+	    u = stateVector->uStack[depth];
+	    s = stateVector->sStack[depth];
+
+	    /*
+	     * As long as the popped state is RETURN, keep discarding stack
+	     * levels.
+	     */
+	} while (s == BDD_ALLSAT_RETURN);
+
+	/*
+	 * At this point, the state is either START, to begin traversing
+	 * the diagram, or SECONDTRY, to explore the 'high' transition of
+	 * a visited bead. If it's SECONDTRY, advance to the bead's 'high'
+	 * transition.
+	 */
+	if (s == BDD_ALLSAT_SECONDTRY) {
+	    stateVector->uStack[depth] = u;
+	    stateVector->sStack[depth] = BDD_ALLSAT_RETURN;
+	    stateVector->v[depth].var = sysPtr->beads[u].high;
+	    stateVector->v[depth].value = 1;
+	    ++depth;
+	    u = sysPtr->beads[u].high;
+	}
+
+	/*
+	 * Traverse the 'low' transitions on the current branch
+	 * until reaching a terminal, stacking SECONDTRY along the way.
+	 */
+	while (u != 0) {
+	    if (u == 1) {
+		/*
+		 * We've reached the 1 terminal. Return the satisfying
+		 * assignment that we just found. We'll resume by unstacking
+		 */
+		stateVector->depth = depth;
+		*vPtr = stateVector->v;
+		*nPtr = depth;
+		return 1;
+	    }
+
+	    /*
+	     * Stack the current bead to restart from the 'high' transition,
+	     * then advance to the 'low' transition.
+	     */
+	    stateVector->uStack[depth] = u;
+	    stateVector->sStack[depth] = BDD_ALLSAT_SECONDTRY;
+	    stateVector->v[depth].var = sysPtr->beads[u].level;
+	    stateVector->v[depth].value = 0;
+	    ++depth;
+	    u = sysPtr->beads[u].low;
+	}
+
+	/* 
+	 * We've reached the zero terminal. Return to the top of this
+	 * function to unwind the stack to the next decision point.
+	 */
+    }
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_AllSat_Finish --
+ *
+ *	Terminates an exhaustive search for satisfying variable assigments
+ *	in a BDD.
+ *
+ * Side effects:
+ *	Frees the state vector and decrements the ref count of the start bead.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+void
+BDD_AllSat_Finish(
+    BDD_AllSatState* stateVector) /* State vector for tbe search */
+{
+    ckfree(stateVector->v);
+    ckfree(stateVector->sStack);
+    BDD_UnrefBead(stateVector->sysPtr, stateVector->uStack[0]);
+    ckfree(stateVector->uStack);
+    ckfree(stateVector);
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_Dump --
  *
  *	Formats a BDD as a Tcl dictionary for debugging.
