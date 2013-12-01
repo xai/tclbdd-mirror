@@ -85,58 +85,26 @@ test bdd-2.4 {expression not found} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
-test bdd-3.1 {constant - wrong # args} {*}{
+test bdd-4.1 {:= - wrong # args} {*}{
     -setup {bdd::system create sys}
-    -body {sys constant}
+    -body {sys :=}
     -cleanup {rename sys {}}
     -returnCodes error
     -match glob
     -result {wrong # args: *}
 }
 
-test bdd-3.2 {constant - bad value} {*}{
+test bdd-4.2 {:= - can't find expr} {*}{
     -setup {bdd::system create sys}
-    -body {sys constant rubbish garbage}
-    -cleanup {rename sys {}}
-    -returnCodes error
-    -match glob
-    -result {expected boolean value but got "garbage"}
-}
-
-test bdd-3.3 {constant 0} {*}{
-    -setup {bdd::system create sys}
-    -body {sys constant zero false; sys beadindex zero}
-    -cleanup {rename sys {}}
-    -result 0
-}
-
-test bdd-3.4 {constant 1} {*}{
-    -setup {bdd::system create sys}
-    -body {sys constant one true; sys beadindex one}
-    -cleanup {rename sys {}}
-    -result 1
-}
-
-test bdd-4.1 {copy - wrong # args} {*}{
-    -setup {bdd::system create sys; sys constant one true}
-    -body {sys copy}
-    -cleanup {rename sys {}}
-    -returnCodes error
-    -match glob
-    -result {wrong # args: *}
-}
-
-test bdd-4.2 {copy - can't find expr} {*}{
-    -setup {bdd::system create sys; sys constant one true}
-    -body {list [catch {sys copy yes garbage} result] $result $::errorCode}
+    -body {list [catch {sys := yes garbage} result] $result $::errorCode}
     -cleanup {rename sys {}}
     -result \
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
-test bdd-4.3 {copy} {*}{
-    -setup {bdd::system create sys; sys constant one true}
-    -body {sys copy yes one; sys beadindex yes}
+test bdd-4.3 {:=} {*}{
+    -setup {bdd::system create sys}
+    -body {sys := yes 1; sys beadindex yes}
     -cleanup {rename sys {}}
     -result 1
 }
@@ -819,7 +787,7 @@ test bdd-12.11 {satcount - parity tree} {
 	}
     }
     -body {
-	sys copy r0 0
+	sys := r0 0
 	for {set i 0} {$i < 128} {incr i 2} {
 	    sys ^ r0 r0 v$i
 	}
@@ -1028,19 +996,19 @@ test bdd-21.1 {eight queens} {*}{
 	}
     }
     -body {
-	sys copy solution 1
+	sys := solution 1
 
 	# iterate through the cells
 
 	for {set row 0} {$row < 8} {incr row} {
-	    sys copy thisRowC 1
+	    sys := thisRowC 1
 	    for {set col 7} {$col >= 0} {incr col -1} {
-		sys copy cellC 1
+		sys := cellC 1
 		set q1 v[expr {8* $row + $col}]
 
 		# queen here <= no other queen in the same column
 
-		sys copy columnC 1
+		sys := columnC 1
 		for {set col2 7} {$col2 >= 0} {incr col2 -1} {
 		    if {$col2 != $col} {
 			set q2 v[expr {8 * $row + $col2}]
@@ -1052,7 +1020,7 @@ test bdd-21.1 {eight queens} {*}{
 		
 		# queen here <= no other queen in the same row
 
-		sys copy rowC 1
+		sys := rowC 1
 		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
 		    if {$row2 != $row} {
 			set q2 v[expr {8 * $row2 + $col}]
@@ -1064,8 +1032,8 @@ test bdd-21.1 {eight queens} {*}{
 
 		# queen here <= no other queen in the same diagonal
 
-		sys copy diag1C 1
-		sys copy diag2C 1
+		sys := diag1C 1
+		sys := diag2C 1
 		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
 		    if {$row2 != $row} {
 			set col2 [expr {$col + $row2 - $row}]
@@ -1098,7 +1066,7 @@ test bdd-21.1 {eight queens} {*}{
 		
 	# at least one queen in each column
 	for {set col 0} {$col < 8} {incr col} {
-	    sys copy columnC 0
+	    sys := columnC 0
 	    for {set row 0} {$row < 8} {incr row} {
 		set q v[expr {8*$row + $col}]
 		sys | columnC columnC $q
@@ -1131,8 +1099,8 @@ test bdd-21.2 {verification of a full adder} {
     -body {
 
 	# specification is a truth table
-	sys copy spec_co 0
-	sys copy spec_z 0
+	sys := spec_co 0
+	sys := spec_z 0
 	foreach {x y ci co z} {
 	    0 0 0 0 0
 	    0 0 1 0 1

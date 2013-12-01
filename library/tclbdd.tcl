@@ -14,10 +14,18 @@ namespace eval bdd {
 }
 
 oo::class create bdd::SystemInt {
-    variable beadseq
     constructor args {
     }
 }
 oo::class create bdd::system {
     superclass ::bdd::SystemInt
+    method === {exprName1 exprName2} {
+	expr {[my beadindex $exprName1] == [my beadindex exprName2]}
+    }
+    method satisfiable {exprName} {
+	expr {[my beadindex $exprName] != 0}
+    }
+    method tautology {exprName} {
+	expr {[my beadindex $exprname] == 1}
+    }
 }

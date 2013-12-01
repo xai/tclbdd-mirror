@@ -104,8 +104,6 @@ static int BddSystemBeadindexMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemBinopMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
-static int BddSystemConstantMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
-				   int, Tcl_Obj* const[]);
 static int BddSystemCopyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
 static int BddSystemDumpMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -171,13 +169,6 @@ const static Tcl_MethodType BddSystemBinopMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };				   /* common to all ten binary operators */
-const static Tcl_MethodType BddSystemConstantMethodType = {
-    TCL_OO_METHOD_VERSION_CURRENT, /* version */
-    "constant",			   /* name */
-    BddSystemConstantMethod,	   /* callProc */
-    DeleteMethod,		   /* method delete proc */
-    CloneMethod			   /* method clone proc */
-};
 const static Tcl_MethodType BddSystemCopyMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "copy",			   /* name */
@@ -249,6 +240,7 @@ const static Tcl_MethodType BddSystemUnsetMethodType = {
 MethodTableRow systemMethodTable[] = {
     { "!=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NE },
     { "&",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_AND },
+    { ":=",        &BddSystemCopyMethodType,      NULL },
     { "<",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LT },
     { "<=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LE },
     { "==",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_EQ },
@@ -256,8 +248,6 @@ MethodTableRow systemMethodTable[] = {
     { ">=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_GE },
     { "^",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_XOR },
     { "beadindex", &BddSystemBeadindexMethodType, NULL },
-    { "constant",  &BddSystemConstantMethodType,  NULL },
-    { "copy",      &BddSystemCopyMethodType,      NULL },
     { "dump",      &BddSystemDumpMethodType,      NULL },
     { "foreach_sat",
                    &BddSystemForeachSatMethodType,NULL },
@@ -555,60 +545,6 @@ BddSystemBinopMethod(
 				beadIndexOpd1, beadIndexOpd2);
     SetNamedExpression(sdata, objv[skipped], beadIndexResult);
     BDD_UnrefBead(sdata->system, beadIndexResult);
-    return TCL_OK;
-}
-
-/*
- *-----------------------------------------------------------------------------
- *
- * BddSystemConstantMethod --
- *
- *	Computes a constant expression in a system of BDD's and assigns
- *	it a name
- *
- * Usage:
- *	$system constant name value
- *
- * Parameters:
- *	name - The name to assign
- *	value - The Boolean value to give it
- *
- * Results:
- *	None
- *
- * Side effects:
- *	Assigns the given value to the name
- *
- *-----------------------------------------------------------------------------
- */
-
-static int
-BddSystemConstantMethod(
-    ClientData clientData,	/* Operation to perform */
-    Tcl_Interp* interp,		/* Tcl interpreter */
-    Tcl_ObjectContext ctx,	/* Object context */
-    int objc,			/* Parameter count */
-    Tcl_Obj *const objv[])	/* Parameter vector */
-{
-    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
-				/* The current object */
-    BddSystemData* sdata = (BddSystemData*)
-	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
-				/* The current system of expressions */
-    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
-				/* The number of args used in method dispatch */
-    int boolval;		/* Boolean value */
-
-    /* Check syntax */
-
-    if (objc != skipped+2) {
-	Tcl_WrongNumArgs(interp, skipped, objv, "name value");
-	return TCL_ERROR;
-    }
-    if (Tcl_GetBooleanFromObj(interp, objv[skipped+1], &boolval) != TCL_OK) {
-	return TCL_ERROR;
-    }
-    SetNamedExpression(sdata, objv[skipped], (BDD_BeadIndex) boolval);
     return TCL_OK;
 }
 
