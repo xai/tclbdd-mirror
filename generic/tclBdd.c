@@ -96,6 +96,7 @@ static Tcl_HashEntry* FindHashEntryForNamedExpression(Tcl_Interp*,
 static int FindNamedExpression(Tcl_Interp*, BddSystemData*, Tcl_Obj*,
 			       BDD_BeadIndex*);
 static int UnsetNamedExpression(Tcl_Interp*, BddSystemData*, Tcl_Obj*);
+static int CompareValueAssignments(const void* a, const void* b);
 static void DeletePerInterpData(PerInterpData*);
 static int BddSystemConstructor(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
@@ -109,6 +110,12 @@ static int BddSystemCopyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
 static int BddSystemDumpMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
+static int BddSystemForeachSatMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				     int, Tcl_Obj *const[]);
+static int ForeachSatPre(Tcl_Interp* interp, BddSystemData*,
+			 Tcl_Obj* varName, Tcl_Obj* script,
+			 BDD_AllSatState* stateVector);
+static int ForeachSatPost(ClientData data[4], Tcl_Interp*, int);
 static int BddSystemNegateMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
 static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -180,8 +187,15 @@ const static Tcl_MethodType BddSystemCopyMethodType = {
 };
 const static Tcl_MethodType BddSystemDumpMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
-    "copy",			   /* name */
+    "dump",			   /* name */
     BddSystemDumpMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
+const static Tcl_MethodType BddSystemForeachSatMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "foreach_sat",		   /* name */
+    BddSystemForeachSatMethod,	   /* callProc */
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
@@ -245,6 +259,8 @@ MethodTableRow systemMethodTable[] = {
     { "constant",  &BddSystemConstantMethodType,  NULL },
     { "copy",      &BddSystemCopyMethodType,      NULL },
     { "dump",      &BddSystemDumpMethodType,      NULL },
+    { "foreach_sat",
+                   &BddSystemForeachSatMethodType,NULL },
     { "nand",      &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NAND },
     { "nor",       &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NOR },
     { "notnthvar", &BddSystemNotnthvarMethodType, NULL },
@@ -712,6 +728,225 @@ BddSystemDumpMethod(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BddSystemForeachSatMethod --
+ *
+ *	Iterates over all satisfying variable assignments of a BDD.
+ *
+ * Usage:
+ *	$system foreach_sat $var $expr $script
+ *
+ * Parameters:
+ *	system - System of BDD's (this object)
+ *	var - Name of a Tcl variable that will hold an assignment
+ *	expr - Name of the expression whose variable assignments are to
+ *	       be enumerated
+ *	script - Tcl script to execute once per satisfying assignment
+ *
+ * Results:
+ *	Returns a standard Tcl result.
+ *
+ * Side effects:
+ *	Whatever the script does.
+ *
+ * The script, like any Tcl loop body, may return any Tcl status code.
+ * A status code of OK or CONTINUE advances to the next satisfying assignment,
+ * or causes the loop to return OK if no more satisfying assignments exist.
+ * A status code of BREAK causes the loop to return OK immediately.
+ * A status code of RETURN, or any other return code, is reported as
+ * the status of the 'foreach_sat' construct.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemForeachSatMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex exprIndex;	/* Bead index of the named expression */
+    BDD_AllSatState* stateVector;
+				/* State vector for the enumeration */
+
+    if (objc != skipped+3) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "varName exprName script");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
+			    &exprIndex) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    stateVector = BDD_AllSatStart(sdata->system, exprIndex);
+    IncrBddSystemDataRefCount(sdata);
+    return ForeachSatPre(interp, sdata, objv[skipped], objv[skipped+2],
+			 stateVector);
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * ForeachSatPre --
+ *
+ *	Sets up a call to a 'foreach_sat' loop body.
+ *
+ * Results:
+ *	Returns a standard Tcl result.
+ *
+ * Side effects:
+ *	If the enumeration has further assignments to process, gets the next
+ *	one and sets up to invoke the loop body through Tcl_NREvalObj. 
+ *	Otherwise, destroys the enumeration and returns TCL_OK to finish the
+ *	loop.
+ *
+ *	Invoking the loop body, of course, has arbitrary side effects.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+ForeachSatPre(
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    BddSystemData* sdata,	/* System of BDD's */
+    Tcl_Obj* varName,		/* Name of the loop variable */
+    Tcl_Obj* script,		/* Loop body */
+    BDD_AllSatState* stateVector) /* State vector for the enumeration */
+{
+    BDD_ValueAssignment* v;	/* Value assignments for the current
+				 * satisfier */
+    BDD_VariableIndex n;	/* Count of value assignments */
+    Tcl_Obj* sat;		/* Satisfying values */
+    BDD_VariableIndex i;
+
+    /*
+     * Time to terminate the loop?
+     */
+    if (!BDD_AllSatNext(stateVector, &v, &n)) {
+	BDD_AllSatFinish(stateVector);
+	DecrBddSystemDataRefCount(sdata);
+	return TCL_OK;
+    }
+
+    /*
+     * Make a satisfying assignment
+     */
+    sat = Tcl_NewObj();
+    for (i = 0; i < n; ++i) {
+	Tcl_ListObjAppendElement(NULL, sat,
+				 Tcl_NewWideIntObj((Tcl_WideInt) v[i].var));
+	Tcl_ListObjAppendElement(NULL, sat,
+				 Tcl_NewBooleanObj((int) v[i].value));
+    }
+    Tcl_IncrRefCount(sat);
+
+    /*
+     * Stash the satisfying assignment in the loop variable
+     */
+    if (Tcl_ObjSetVar2(interp, varName, NULL, sat, TCL_LEAVE_ERR_MSG) == NULL) {
+	Tcl_DecrRefCount(sat);
+	BDD_AllSatFinish(stateVector);
+	DecrBddSystemDataRefCount(sdata);
+	return TCL_ERROR;
+    }
+    Tcl_DecrRefCount(sat);
+
+    Tcl_NRAddCallback(interp, ForeachSatPost, 
+		      (ClientData) sdata,
+		      (ClientData) varName,
+		      (ClientData) script,
+		      (ClientData) stateVector);
+    if (Tcl_NREvalObj(interp, script, 0) != TCL_OK) {
+	BDD_AllSatFinish(stateVector);
+	DecrBddSystemDataRefCount(sdata);
+	return TCL_ERROR;
+    }
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * ForeachSatPost --
+ *
+ *	Handle return from the loop body in a 'foreach_sat' construct.
+ *
+ * Results:
+ *	Returns a standard Tcl return code.
+ *
+ * Side effects:
+ *	Schedules the next iteration of the loop body.
+ *
+ * If the script returns TCL_OK or TCL_CONTINUE, this procedure schedules the
+ * next iteration and returns TCL_OK.
+ * If the script returns TCL_BREAK, this procedure returns TCL_OK without
+ * scheduling the next iteration.
+ * If the script returns TCL_RETURN, this procedure returns TCL_RETURN.
+ * If the script returns TCL_ERROR or a nonstandard return code, this
+ * procedure returns the same error or return code.
+ *
+ * The client data layout is:
+ *	0 - Pointer to the BDD system data
+ *	1 - Loop variable name
+ *	2 - Loop body
+ *	3 - State vector for the enumeration.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+ForeachSatPost(
+    ClientData clientData[4],	/* Client data */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    int result)			/* Result code from the loop body */
+{
+    BddSystemData* sdata = (BddSystemData*) clientData[0];
+    Tcl_Obj* var = (Tcl_Obj*) clientData[1];
+    Tcl_Obj* script = (Tcl_Obj*) clientData[2];
+    BDD_AllSatState* stateVector = (BDD_AllSatState*) clientData[3];
+
+    /* Handle the result and continue iterating if appropriate */
+
+    switch(result) {
+    case TCL_OK:
+    case TCL_CONTINUE:
+	/*
+	 * We need to reset the result, so that an error message will not
+	 * be appended to the result of the last evaluation.
+	 */
+	Tcl_ResetResult(interp);
+	return ForeachSatPre(interp, sdata, var, script, stateVector);
+    case TCL_BREAK:
+	result = TCL_OK;
+	Tcl_ResetResult(interp);
+	break;
+    case TCL_ERROR:
+	Tcl_AppendObjToErrorInfo(interp,
+				 Tcl_ObjPrintf("\n   ('foreach_sat' body, "
+					       "line %d)",
+					       Tcl_GetErrorLine(interp)));
+	/* add to backtrace */
+	break;
+    default:
+	break;
+    }
+
+    /* Clean up memory */
+    BDD_AllSatFinish(stateVector);
+    DecrBddSystemDataRefCount(sdata);
+    return result;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BddSystemNegateMethod --
  *
  *	Computes the negation of a named expression in a system of
@@ -963,6 +1198,13 @@ BddSystemRestrictMethod(
 	    }
 	}
     }
+    
+    /*
+     * Order the literals
+     */
+    qsort(restrictions, nRestrictions, sizeof(BDD_ValueAssignment),
+	  CompareValueAssignments);
+
     result = BDD_Restrict(sdata->system, expr, restrictions, nRestrictions);
     SetNamedExpression(sdata, objv[skipped], result);
     BDD_UnrefBead(sdata->system, result);
@@ -1278,6 +1520,32 @@ UnsetNamedExpression(
 	Tcl_DeleteHashEntry(entryPtr);
 	return TCL_OK;
     }
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * CompareValueAssignments --
+ *
+ *	Callback for 'qsort' to compare value assignments based on their
+ *	variable indices.
+ *
+ * Results:
+ *	Returns -1 if a < b; 0 if a == b, 1 if a > b.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+CompareValueAssignments(
+    const void* a,		/* Pointer to first assignment */
+    const void* b)		/* Pointer to second assignment */
+{
+    const BDD_ValueAssignment* aPtr = (const BDD_ValueAssignment*) a;
+    const BDD_ValueAssignment* bPtr = (const BDD_ValueAssignment*) b;
+    if (aPtr->var < bPtr->var) return -1;
+    else if (aPtr->var > bPtr->var) return 1;
+    else return 0;
 }
 
 /*

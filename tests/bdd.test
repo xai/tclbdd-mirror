@@ -834,164 +834,6 @@ test bdd-12.11 {satcount - parity tree} {
     -result {257 80000000000000000000000000000000}
 }
 
-test bdd-12.12 {eight queens} {*}{
-    -setup {
-	bdd::system create sys
-	for {set i 0} {$i < 64} {incr i} {
-	    sys nthvar v$i $i; sys notnthvar !v$i $i
-	}
-    }
-    -body {
-
-	set result {}
-
-	sys constant solution 1
-
-	# iterate through the cells
-
-	for {set row 0} {$row < 8} {incr row} {
-	    sys constant thisRowC 1
-	    for {set col 7} {$col >= 0} {incr col -1} {
-		sys constant cellC 1
-		set q1 v[expr {8* $row + $col}]
-
-		# queen here <= no other queen in the same column
-
-		sys constant columnC 1
-		for {set col2 7} {$col2 >= 0} {incr col2 -1} {
-		    if {$col2 != $col} {
-			set q2 v[expr {8 * $row + $col2}]
-			sys & columnC columnC !$q2
-		    }
-		}
-		sys <= columnC $q1 columnC
-		sys & cellC cellC columnC
-		
-		# queen here <= no other queen in the same row
-
-		sys constant rowC 1
-		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
-		    if {$row2 != $row} {
-			set q2 v[expr {8 * $row2 + $col}]
-			sys & rowC rowC !$q2
-		    }
-		}
-		sys <= rowC $q1 rowC
-		sys & cellC cellC rowC
-
-		# queen here <= no other queen in the same diagonal
-
-		sys constant diag1C 1
-		sys constant diag2C 1
-		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
-		    if {$row2 != $row} {
-			set col2 [expr {$col + $row2 - $row}]
-			if {$col2 >= 0 && $col2 < 8} {
-			    set q2 v[expr {8 * $row2 + $col2}]
-			    sys & diag1C diag1C !$q2
-			}
-			set col2 [expr {$col + $row - $row2}]
-			if {$col2 >= 0 && $col2 < 8} {
-			    set q2 v[expr {8 * $row2 + $col2}]
-			    sys & diag2C diag2C !$q2
-			}
-		    }
-		}
-		sys <= diag1C $q1 diag1C
-		sys & cellC cellC diag1C
-
-		sys <= diag2C $q1 diag2C
-		sys & cellC cellC diag2C
-
-		# accumulate into the constraint set for the row
-
-		sys & thisRowC thisRowC cellC
-	    }
-
-	    # accumulate all constraints for a row into the solution
-
-	    sys & solution solution thisRowC
-	}
-		
-	# at least one queen in each column
-	for {set col 0} {$col < 8} {incr col} {
-	    sys constant columnC 0
-	    for {set row 0} {$row < 8} {incr row} {
-		set q v[expr {8*$row + $col}]
-		sys | columnC columnC $q
-	    }
-	    sys & solution solution columnC
-	}
-
-	sys satcount solution
-
-    }
-    -cleanup {rename sys {}}
-    -result 92
-}
-
-test bdd-12.13 {verification of a full adder} {
-    -setup {
-	bdd::system create sys
-	sys nthvar x 0; sys notnthvar !x 0
-	sys nthvar y 1; sys notnthvar !y 1
-	sys nthvar ci 2; sys notnthvar !ci 2
-    }
-    -body {
-
-	# specification is a truth table
-	sys constant spec_co 0
-	sys constant spec_z 0
-	foreach {x y ci co z} {
-	    0 0 0 0 0
-	    0 0 1 0 1
-	    0 1 0 0 1
-	    0 1 1 1 0
-
-	    1 0 0 0 1
-	    1 0 1 1 0
-	    1 1 0 1 0
-	    1 1 1 1 1
-	} {
-	    if {$x} {
-		set xlit x
-	    } else {
-		set xlit !x
-	    }
-	    if {$y} {
-		set ylit y
-	    } else {
-		set ylit !y
-	    }
-	    if {$ci} {
-		set cilit ci
-	    } else {
-		set cilit !ci
-	    }
-	    sys & input $cilit $ylit
-	    sys & input input $xlit
-	    if {$co} {
-		sys | spec_co spec_co input
-	    }
-	    if {$z} {
-		sys | spec_z spec_z input
-	    }
-	}
-
-	# implementation is a gate array
-	sys & gate1 x y
-	sys ^ gate2 x y
-	sys & gate3 gate2 ci
-	sys ^ z gate2 ci
-	sys | co gate1 gate3
-
-	list [expr {[sys beadindex co] == [sys beadindex spec_co]}] \
-	    [expr {[sys beadindex z] == [sys beadindex spec_z]}]
-    }
-    -cleanup {rename sys {}}
-    -result {1 1}
-}
-		
 test bdd-13.1 {restrict - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -1107,7 +949,24 @@ test bdd-13.7 {restrict by two literals} {*}{
     -result 1
 }
 
-test bdd-13.8 {restrict - reduce to constant} {*}{
+test bdd-13.8 {restrict by two disordered literals} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {
+	sys restrict r1 r2 c a
+	expr {[sys beadindex r1] == [sys beadindex b]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-13.9 {restrict - reduce to constant} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0
@@ -1161,6 +1020,169 @@ test bdd-13.11 {restrict one} {*}{
     -result 1
 }
 
+test bdd-21.1 {eight queens} {*}{
+    -setup {
+	bdd::system create sys
+	for {set i 0} {$i < 64} {incr i} {
+	    sys nthvar v$i $i; sys notnthvar !v$i $i
+	}
+    }
+    -body {
+	sys copy solution 1
+
+	# iterate through the cells
+
+	for {set row 0} {$row < 8} {incr row} {
+	    sys copy thisRowC 1
+	    for {set col 7} {$col >= 0} {incr col -1} {
+		sys copy cellC 1
+		set q1 v[expr {8* $row + $col}]
+
+		# queen here <= no other queen in the same column
+
+		sys copy columnC 1
+		for {set col2 7} {$col2 >= 0} {incr col2 -1} {
+		    if {$col2 != $col} {
+			set q2 v[expr {8 * $row + $col2}]
+			sys & columnC columnC !$q2
+		    }
+		}
+		sys <= columnC $q1 columnC
+		sys & cellC cellC columnC
+		
+		# queen here <= no other queen in the same row
+
+		sys copy rowC 1
+		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
+		    if {$row2 != $row} {
+			set q2 v[expr {8 * $row2 + $col}]
+			sys & rowC rowC !$q2
+		    }
+		}
+		sys <= rowC $q1 rowC
+		sys & cellC cellC rowC
+
+		# queen here <= no other queen in the same diagonal
+
+		sys copy diag1C 1
+		sys copy diag2C 1
+		for {set row2 7} {$row2 >= 0} {incr row2 -1} {
+		    if {$row2 != $row} {
+			set col2 [expr {$col + $row2 - $row}]
+			if {$col2 >= 0 && $col2 < 8} {
+			    set q2 v[expr {8 * $row2 + $col2}]
+			    sys & diag1C diag1C !$q2
+			}
+			set col2 [expr {$col + $row - $row2}]
+			if {$col2 >= 0 && $col2 < 8} {
+			    set q2 v[expr {8 * $row2 + $col2}]
+			    sys & diag2C diag2C !$q2
+			}
+		    }
+		}
+		sys <= diag1C $q1 diag1C
+		sys & cellC cellC diag1C
+
+		sys <= diag2C $q1 diag2C
+		sys & cellC cellC diag2C
+
+		# accumulate into the constraint set for the row
+
+		sys & thisRowC thisRowC cellC
+	    }
+
+	    # accumulate all constraints for a row into the solution
+
+	    sys & solution solution thisRowC
+	}
+		
+	# at least one queen in each column
+	for {set col 0} {$col < 8} {incr col} {
+	    sys copy columnC 0
+	    for {set row 0} {$row < 8} {incr row} {
+		set q v[expr {8*$row + $col}]
+		sys | columnC columnC $q
+	    }
+	    sys & solution solution columnC
+	}
+	sys foreach_sat A solution {
+	    set sol [lrepeat 8 {}]
+	    foreach {var value} $A {
+		if {$value} {
+		    lset sol [expr {$var/8}] [expr {$var%8}]
+		}
+	    }
+	    lappend sols [join $sol {}]
+	}
+	lreverse $sols
+
+    }
+    -cleanup {rename sys {}}
+    -result {04752613 05726314 06357142 06471352 13572064 14602753 14630752 15063724 15720364 16257403 16470352 17502463 20647135 24170635 24175360 24603175 24730615 25147063 25160374 25164073 25307461 25317460 25703641 25704613 25713064 26174035 26175304 27360514 30471625 30475261 31475026 31625704 31625740 31640752 31746025 31750246 35041726 35716024 35720641 36074152 36271405 36415027 36420571 37025164 37046152 37420615 40357162 40731625 40752613 41357206 41362750 41506372 41703625 42057136 42061753 42736051 46027531 46031752 46137025 46152037 46152073 46302751 47302516 47306152 50417263 51602473 51603742 52064713 52073164 52074136 52460317 52470316 52613704 52617403 52630714 53047162 53174602 53602417 53607142 57130642 60275314 61307425 61520374 62057413 62714053 63147025 63175024 64205713 71306425 71420635 72051463 73025164}
+}
+
+test bdd-21.2 {verification of a full adder} {
+    -setup {
+	bdd::system create sys
+	sys nthvar x 0; sys notnthvar !x 0
+	sys nthvar y 1; sys notnthvar !y 1
+	sys nthvar ci 2; sys notnthvar !ci 2
+    }
+    -body {
+
+	# specification is a truth table
+	sys copy spec_co 0
+	sys copy spec_z 0
+	foreach {x y ci co z} {
+	    0 0 0 0 0
+	    0 0 1 0 1
+	    0 1 0 0 1
+	    0 1 1 1 0
+
+	    1 0 0 0 1
+	    1 0 1 1 0
+	    1 1 0 1 0
+	    1 1 1 1 1
+	} {
+	    if {$x} {
+		set xlit x
+	    } else {
+		set xlit !x
+	    }
+	    if {$y} {
+		set ylit y
+	    } else {
+		set ylit !y
+	    }
+	    if {$ci} {
+		set cilit ci
+	    } else {
+		set cilit !ci
+	    }
+	    sys & input $cilit $ylit
+	    sys & input input $xlit
+	    if {$co} {
+		sys | spec_co spec_co input
+	    }
+	    if {$z} {
+		sys | spec_z spec_z input
+	    }
+	}
+
+	# implementation is a gate array
+	sys & gate1 x y
+	sys ^ gate2 x y
+	sys & gate3 gate2 ci
+	sys ^ z gate2 ci
+	sys | co gate1 gate3
+
+	list [expr {[sys beadindex co] == [sys beadindex spec_co]}] \
+	    [expr {[sys beadindex z] == [sys beadindex spec_z]}]
+    }
+    -cleanup {rename sys {}}
+    -result {1 1}
+}
+		
 cleanupTests
 return
 

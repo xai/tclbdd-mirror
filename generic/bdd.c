@@ -1319,7 +1319,7 @@ BDD_AllSatStart(
 /*
  *-----------------------------------------------------------------------------
  *
- * BDD_AllSat_Next --
+ * BDD_AllSatNext --
  *
  *	Retrieves the next satisfying assignment from an iterator over
  *	a BDD
@@ -1342,7 +1342,7 @@ BDD_AllSatStart(
  */
 
 int
-BDD_AllSat_Next(
+BDD_AllSatNext(
     BDD_AllSatState* stateVector,
 				/* State vector from BDD_AllSat_Start */
     BDD_ValueAssignment **vPtr, /* OUTPUT: Vector of satisfying literals */
@@ -1402,7 +1402,7 @@ BDD_AllSat_Next(
 	if (s == BDD_ALLSAT_SECONDTRY) {
 	    stateVector->uStack[depth] = u;
 	    stateVector->sStack[depth] = BDD_ALLSAT_RETURN;
-	    stateVector->v[depth].var = sysPtr->beads[u].high;
+	    stateVector->v[depth].var = sysPtr->beads[u].level;
 	    stateVector->v[depth].value = 1;
 	    ++depth;
 	    u = sysPtr->beads[u].high;
@@ -1446,7 +1446,7 @@ BDD_AllSat_Next(
 /*
  *-----------------------------------------------------------------------------
  *
- * BDD_AllSat_Finish --
+ * BDD_AllSatFinish --
  *
  *	Terminates an exhaustive search for satisfying variable assigments
  *	in a BDD.
@@ -1458,7 +1458,7 @@ BDD_AllSat_Next(
  */
 
 void
-BDD_AllSat_Finish(
+BDD_AllSatFinish(
     BDD_AllSatState* stateVector) /* State vector for tbe search */
 {
     ckfree(stateVector->v);
