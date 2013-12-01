@@ -992,8 +992,122 @@ test bdd-12.13 {verification of a full adder} {
     -result {1 1}
 }
 		
+test bdd-13.1 {restrict - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+    }
+    -body {
+	sys restrict r1
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
 
-test bdd-13.n {restrict - reduce to constant} {*}{
+test bdd-13.2 {restrict - can't find expr to restrict} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+    }
+    -body {list [catch {sys restrict r1 garbage} result] $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-13.3 {restrict - can't find second expression} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {list [catch {sys restrict r1 r2 garbage} result] \
+	       $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-13.4 {restrict - not a literal} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {list [catch {sys restrict r1 c r2} result] \
+	       $result $::errorCode}
+    -cleanup {rename sys {}}
+    -result \
+	{1 {r2 is not a literal} {BDD NotLiteral r2}}
+}
+
+test bdd-13.5 {restrict - do nothing gracefully} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {
+	sys restrict r1 r2
+	expr {[sys beadindex r1] == [sys beadindex r2]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-13.6 {restrict by literal} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {
+	sys restrict r1 r2 !b
+	sys ^ r3 a c 
+	expr {[sys beadindex r1] == [sys beadindex r3]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-13.7 {restrict by two literals} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {
+	sys restrict r1 r2 a c
+	expr {[sys beadindex r1] == [sys beadindex b]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-13.8 {restrict - reduce to constant} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0
@@ -1010,6 +1124,40 @@ test bdd-13.n {restrict - reduce to constant} {*}{
     -cleanup {
 	rename sys {}
     }
+    -result 1
+}
+
+test bdd-13.10 {restrict zero} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {
+	sys restrict r1 0 a c
+	sys beadindex r1
+    }
+    -cleanup {rename sys {}}
+    -result 0
+}
+
+test bdd-13.11 {restrict one} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ r2 c b
+	sys ^ r2  a r2
+    }
+    -body {
+	sys restrict r1 1 a c
+	sys beadindex r1
+    }
+    -cleanup {rename sys {}}
     -result 1
 }
 

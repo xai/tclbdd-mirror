@@ -922,9 +922,9 @@ BddSystemRestrictMethod(
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
     BDD_BeadIndex expr;		/* The expression to restrict */
-    BDD_VariableIndex nRestrictions;
+    BDD_VariableIndex nRestrictions = 0;
 				/* How many restrictions? */
-    BDD_ValueAssignment* restrictions;
+    BDD_ValueAssignment* restrictions = NULL;
     int i;
     BDD_VariableIndex j;
     BDD_BeadIndex literalIndex;
@@ -957,15 +957,15 @@ BddSystemRestrictMethod(
 					     Tcl_GetString(objv[i]));
 		Tcl_SetObjResult(interp, errorMessage);
 		Tcl_SetErrorCode(interp, "BDD", "NotLiteral",
-				 Tcl_GetString(objv[i]));
+				 Tcl_GetString(objv[i]), NULL);
 		ckfree(restrictions);
 		return TCL_ERROR;
 	    }
 	}
-	result = BDD_Restrict(sdata->system, expr, restrictions, nRestrictions);
-	SetNamedExpression(sdata, objv[skipped], result);
-	BDD_UnrefBead(sdata->system, result);
     }
+    result = BDD_Restrict(sdata->system, expr, restrictions, nRestrictions);
+    SetNamedExpression(sdata, objv[skipped], result);
+    BDD_UnrefBead(sdata->system, result);
     return TCL_OK;
 }
 
