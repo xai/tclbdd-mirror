@@ -13,12 +13,7 @@ namespace eval bdd {
     namespace export system
 }
 
-oo::class create bdd::SystemInt {
-    constructor args {
-    }
-}
 oo::class create bdd::system {
-    superclass ::bdd::SystemInt
     method === {exprName1 exprName2} {
 	expr {[my beadindex $exprName1] == [my beadindex exprName2]}
     }
