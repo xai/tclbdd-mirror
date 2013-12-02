@@ -988,6 +988,240 @@ test bdd-13.11 {restrict one} {*}{
     -result 1
 }
 
+test bdd-14.1 {foreach_sat - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys foreach_sat
+    }
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-14.2 {foreach_sat - bad expression} {
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys foreach_sat x garbage {}} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+    
+test bdd-14.3 {foreach_sat - nothing satisfies} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys foreach_sat x 0 {error this loop should not execute}
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {}
+}
+    
+test bdd-14.4 {foreach_sat - tautology} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	set result {}
+	sys foreach_sat x 1 {
+	    lappend result $x
+	}
+	set result
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{}}
+}
+
+test bdd-14.5 {foreach_sat - failure to write loop variable} {
+    -setup {
+	set badx(0) 1
+	bdd::system create sys
+    }
+    -body {
+	set result {}
+	sys foreach_sat badx 1 {
+	}
+    }
+    -cleanup {
+	rename sys {}
+	unset badx
+    }
+    -returnCodes error
+    -match glob
+    -result {*variable is array*}
+}
+
+test bdd-14.6 {foreach_sat - usual case} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+    }
+    -body {
+	set result {}
+	sys := z a
+	sys & y b c
+	sys | z z y
+	sys | z z d
+	sys foreach_sat x z {
+	    lappend result $x
+	}
+	set result
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1} {0 0 1 1 2 1} {0 1}}
+}
+
+test bdd-14.7 {foreach_sat - continue} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+    }
+    -body {
+	set result {}
+	sys := z a
+	sys & y b c
+	sys | z z y
+	sys | z z d
+	sys foreach_sat x z {
+	    if {[dict exists $x 3]} continue
+	    lappend result $x
+	}
+	set result
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{0 0 1 1 2 1} {0 1}}
+}
+
+test bdd-14.8 {foreach_sat - break} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+    }
+    -body {
+	set result {}
+	sys := z a
+	sys & y b c
+	sys | z z y
+	sys | z z d
+	sys foreach_sat x z {
+	    if {![dict exists $x 3]} break
+	    lappend result $x
+	}
+	set result
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1}}
+}
+
+test bdd-14.9 {foreach_sat - return} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	proc bdd-14.9 {} {
+	    set result {}
+	    sys foreach_sat x z {
+		if {![dict exists $x 3]} {
+		    return $result
+		}
+		lappend result $x
+	    }
+	    error this line should not be reached
+	}
+    }
+    -body {
+	sys := z a
+	sys & y b c
+	sys | z z y
+	sys | z z d
+	bdd-14.9
+    }
+    -cleanup {
+	rename sys {}
+	rename bdd-14.9 {}
+    }
+    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1}}
+}
+
+test bdd-14.10 {foreach_sat - error} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+    }
+    -body {
+	set result {}
+	sys := z a
+	sys & y b c
+	sys | z z y
+	sys | z z d
+	list \
+	    [catch {
+		sys foreach_sat x z {
+		    if {![dict exists $x 3]} {
+			error testing
+		    }
+		    lappend result $x
+		}
+	    } result] \
+	    $result \
+	    $::errorInfo
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -match glob
+    -result {1 testing {testing
+    while executing
+"error testing"
+   ('foreach_sat' body, line 3)
+    invoked from within
+*}}
+}
+
+test bdd-14.11 {foreach_sat - unusual return} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+    }
+    -body {
+	set result {}
+	sys := z a
+	sys & y b c
+	sys | z z y
+	sys | z z d
+	list \
+	    [catch {
+		sys foreach_sat x z {
+		    if {![dict exists $x 3]} {
+			return -code 6 -level 0 testing
+		    }
+		    lappend result $x
+		}
+	    } result] \
+	    $result
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {6 testing}
+}
+
 test bdd-21.1 {eight queens} {*}{
     -setup {
 	bdd::system create sys
