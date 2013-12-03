@@ -1161,6 +1161,139 @@ BDD_Restrict(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_Quantify --
+ *
+ *	Apply an existential, unique, or universal quantifier to a BDD.
+ *
+ * Results:
+ *	Returns a BDD representing the quantified expression.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static BDD_BeadIndex
+Quantify(
+    Tcl_HashTable* H,		/* Hash table of cached partial results */
+    BDD_System* sysPtr,		/* Pointer to the system of BDD's */
+    BDD_Quantifier q,		/* Quantifier to apply */
+    const BDD_VariableIndex* v,	/* Variables to quantify */
+    BDD_VariableIndex n,	/* Number of quantified variables */
+    BDD_BeadIndex u)		/* Expression to quantify */
+{
+    BDD_BeadIndex l;		/* Low transition of the result */
+    BDD_BeadIndex h;		/* High transition of the result */
+    BDD_BeadIndex r;		/* Return value */
+    int newFlag;		/* Flag == 1 iff the result was not cached */
+    Tcl_HashEntry* entryPtr;	/* Pointer to the hash entry for
+				 * a cached result */
+
+    /* Check for a cached result */
+    entryPtr = Tcl_CreateHashEntry(H, (ClientData) u, &newFlag);
+    if (!newFlag) {
+	r = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
+	++sysPtr->beads[r].refCount;
+	return r;
+    }
+
+    for (;;) {
+	Bead* beadPtr = sysPtr->beads + u;
+	if (v == 0) {
+	    /*
+	     * No variables remain to quantify. Simply return the expression
+	     * itself.
+	     */
+	    ++beadPtr->refCount;
+	    r = u;
+	    break;
+	} else if (beadPtr->level < *v) {
+	    /*
+	     * The current variable in the expression is unquantified.
+	     * Quantify the two subexpressions and make the result
+	     */
+	    l = Quantify(H, sysPtr, q, v, n, beadPtr->low);
+	    h = Quantify(H, sysPtr, q, v, n, beadPtr->high);
+	    r = BDD_MakeBead(sysPtr, beadPtr->level, l, h);
+	    BDD_UnrefBead(sysPtr,h);
+	    BDD_UnrefBead(sysPtr,l);
+	    break;
+	} else if (beadPtr->level == *v) {
+	    /*
+	     * The current variable in the expression is quantified.
+	     * Quantify the two subexpressions with respect to the
+	     * remaining variables and then apply the combining operation.
+	     *
+	     * Would it be advantageous to cache more aggressively here,
+	     * rather than creating/destroying the hash table in BDD_Apply?
+	     */
+	    l = Quantify(H, sysPtr, q, v+1, n-1, beadPtr->low);
+	    h = Quantify(H, sysPtr, q, v+1, n-1, beadPtr->high);
+	    r = BDD_Apply(sysPtr, q, l, h);
+	    BDD_UnrefBead(sysPtr,h);
+	    BDD_UnrefBead(sysPtr,l);
+	    break;
+	} else if (q == BDD_QUANT_UNIQUE) {
+	    /* 
+	     * There is a quantified variable that does not appear free in
+	     * the expression.
+	     *
+	     * If the quantifier is UNIQUE, then either value of the variable
+	     * will satisfy the expression equally, and no unique solution
+	     * is possible.
+	     */
+	    r = 0;
+	    ++sysPtr->beads[r].refCount;
+	    break;
+	} else {
+	    /* 
+	     * The current variable does not appear free in the expression,
+	     * and the quantifier is EXISTS or FORALL. The quantification is
+	     * trivially satisfied with respect to the variable in question.
+	     * Advance to the next variable.
+	     */
+	    ++v;
+	    --n;
+	}
+    }
+    
+    /*
+     * Cache and return the result
+     * It is possible for an outer quantification to destroy the
+     * result altogether, so make sure that the refcount tracks the
+     * cache entry.
+     */
+    ++sysPtr->beads[r].refCount;
+    Tcl_SetHashValue(entryPtr, (ClientData) r);
+    return r;
+}
+BDD_BeadIndex
+BDD_Quantify(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_Quantifier q,		/* Quantifier to apply */
+    const BDD_VariableIndex* v,	/* List of variables to quantify */
+    BDD_VariableIndex n,	/* Number of variables to quantify */
+    BDD_BeadIndex e)		/* Expression to quantify */
+{
+    Tcl_HashTable H;		/* Hash table to cache partial results */
+    Tcl_HashSearch search;	/* Search state for clearing the hash */
+    Tcl_HashEntry* entryPtr;	/* Hash table entry to be cleared */
+    BDD_BeadIndex c;		/* Cached result */
+    Tcl_InitHashTable(&H, TCL_ONE_WORD_KEYS);
+    BDD_BeadIndex r = Quantify(&H, sysPtr, q, v, n, e);
+    for (entryPtr = Tcl_FirstHashEntry(&H, &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	c = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
+	BDD_UnrefBead(sysPtr, c);
+    }
+    Tcl_DeleteHashTable(&H);
+    return r;
+	 
+    
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_SatCount --
  *
  *	Counts the number of variable assignments that satisfy the expression

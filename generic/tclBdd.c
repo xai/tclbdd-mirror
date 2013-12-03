@@ -97,6 +97,7 @@ static int FindNamedExpression(Tcl_Interp*, BddSystemData*, Tcl_Obj*,
 			       BDD_BeadIndex*);
 static int UnsetNamedExpression(Tcl_Interp*, BddSystemData*, Tcl_Obj*);
 static int CompareValueAssignments(const void* a, const void* b);
+static int CompareVariableIndices(const void* a, const void* b);
 static void DeletePerInterpData(PerInterpData*);
 static int BddSystemConstructor(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
@@ -120,6 +121,8 @@ static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemNthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
+static int BddSystemQuantifyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				   int, Tcl_Obj* const[]);
 static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemSatcountMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -211,6 +214,13 @@ const static Tcl_MethodType BddSystemNthvarMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemQuantifyMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "quantify",			   /* name */
+    BddSystemQuantifyMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemRestrictMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "restrict",			   /* name */
@@ -249,6 +259,10 @@ MethodTableRow systemMethodTable[] = {
     { "^",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_XOR },
     { "beadindex", &BddSystemBeadindexMethodType, NULL },
     { "dump",      &BddSystemDumpMethodType,      NULL },
+    { "exists",	   &BddSystemQuantifyMethodType,  
+      					        (ClientData) BDD_QUANT_EXISTS },
+    { "forall",	   &BddSystemQuantifyMethodType,  
+      					        (ClientData) BDD_QUANT_FORALL },
     { "foreach_sat",
                    &BddSystemForeachSatMethodType,NULL },
     { "nand",      &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NAND },
@@ -257,6 +271,8 @@ MethodTableRow systemMethodTable[] = {
     { "nthvar",    &BddSystemNthvarMethodType,    NULL },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
+    { "unique",	   &BddSystemQuantifyMethodType,  
+      					        (ClientData) BDD_QUANT_UNIQUE },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
     { "~",         &BddSystemNegateMethodType,    NULL },
@@ -1053,6 +1069,103 @@ BddSystemNotnthvarMethod(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BddSystemQuantifyMethod --
+ *
+ *	Quantifies a BDD with respect to a particular set of variables.
+ *
+ * Usage:
+ *	$system exists $name $vars $expr
+ *	$system forall $name $vars $expr
+ *	$system unique $name $vars $expr
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	name - Name to assign to the resulting expression.
+ *	vars - List of literals that must be un-negated variable names
+ *	expr - Expression to quantify.
+ *
+ * Results:
+ *	Returns a standard Tcl result
+ *
+ * Side effects:
+ *	Creates the named expression if successful
+ *
+ *-----------------------------------------------------------------------------
+ */
+static int
+BddSystemQuantifyMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    BDD_Quantifier q = (BDD_Quantifier) clientData;
+				/* The quantifier to apply */
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex u;		/* Expression to quantify */
+    int varc;			/* Count of variable names supplied */
+    Tcl_Obj** varv;		/* List of variable names supplied */
+    BDD_BeadIndex literalIndex;	/* Index of the current variable as a BDD */
+    BDD_VariableIndex* v;	/* Variables to quantify */
+    BDD_ValueAssignment a;	/* Current quantified variable */
+    Tcl_Obj* errorMessage;	/* Error message of a failed execution */
+    BDD_BeadIndex result;	/* Result of the quantification */
+    BDD_VariableIndex i;
+
+    /* Check syntax */
+
+    if (objc != skipped+3) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name vars expr");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+2],
+			    &u) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    if (Tcl_ListObjGetElements(interp, objv[skipped+1],
+			       &varc, &varv) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    v = ckalloc(varc);
+    for (i = 0; i < varc; ++i) {
+	if (FindNamedExpression(interp, sdata, varv[i],
+				&literalIndex) != TCL_OK) {
+	    ckfree(v);
+	    return TCL_ERROR;
+	}
+	if (!BDD_Literal(sdata->system, literalIndex, &a)
+	    || (a.value == 0)) {
+	    errorMessage = Tcl_ObjPrintf("%s is not a variable",
+					 Tcl_GetString(varv[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NotVariable",
+			     Tcl_GetString(varv[i]), NULL);
+	    ckfree(v);
+	    return TCL_ERROR;
+	}	    
+    }
+
+    /*
+     * Order the literals
+     */
+    qsort(v, varc, sizeof(BDD_VariableIndex), CompareVariableIndices);
+
+    result = BDD_Quantify(sdata->system, q, v, varc, u);
+    SetNamedExpression(sdata, objv[skipped], result);
+    BDD_UnrefBead(sdata->system, result);
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BddSystemRestrictMethod --
  *
  *	Computes a BDD restricted to a particular set of variable values
@@ -1481,6 +1594,31 @@ CompareValueAssignments(
     const BDD_ValueAssignment* bPtr = (const BDD_ValueAssignment*) b;
     if (aPtr->var < bPtr->var) return -1;
     else if (aPtr->var > bPtr->var) return 1;
+    else return 0;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * CompareVariableIndices --
+ *
+ *	Callback for 'qsort' to compare	variable indices.
+ *
+ * Results:
+ *	Returns -1 if a < b; 0 if a == b, 1 if a > b.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+CompareVariableIndices(
+    const void* a,		/* Pointer to first assignment */
+    const void* b)		/* Pointer to second assignment */
+{
+    const BDD_VariableIndex* aPtr = (const BDD_VariableIndex*) a;
+    const BDD_VariableIndex* bPtr = (const BDD_VariableIndex*) b;
+    if (*aPtr<*bPtr) return -1;
+    else if (*aPtr>*bPtr) return 1;
     else return 0;
 }
 

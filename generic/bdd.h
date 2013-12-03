@@ -55,6 +55,15 @@ typedef enum {			/* !a!b !ab a!b ab */
 
 } BDD_BinOp;
 
+/*
+ * Quantifiers for use with BDD's
+ */
+typedef enum BDD_Quantifier {
+    BDD_QUANT_FORALL = BDD_BINOP_AND,
+    BDD_QUANT_EXISTS = BDD_BINOP_OR,
+    BDD_QUANT_UNIQUE = BDD_BINOP_XOR,
+} BDD_Quantifier;
+
 typedef struct BDD_System BDD_System;
 typedef struct BDD_AllSatState BDD_AllSatState;
 
@@ -106,6 +115,11 @@ extern BDDAPI BDD_BeadIndex BDD_Restrict(BDD_System* sysPtr,
 					 BDD_BeadIndex u,
 					 const BDD_ValueAssignment r[],
 					 BDD_VariableIndex n);
+extern BDDAPI BDD_BeadIndex BDD_Quantify(BDD_System* sysPtr,
+					 BDD_Quantifier q,
+					 const BDD_VariableIndex v[],
+					 BDD_VariableIndex n,
+					 BDD_BeadIndex u);
 extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
 extern BDDAPI BDD_AllSatState* BDD_AllSatStart(BDD_System* sysPtr,
