@@ -61,7 +61,6 @@ typedef enum {			/* !a!b !ab a!b ab */
 typedef enum BDD_Quantifier {
     BDD_QUANT_FORALL = BDD_BINOP_AND,
     BDD_QUANT_EXISTS = BDD_BINOP_OR,
-    BDD_QUANT_UNIQUE = BDD_BINOP_XOR,
 } BDD_Quantifier;
 
 typedef struct BDD_System BDD_System;

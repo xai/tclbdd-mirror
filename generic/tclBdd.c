@@ -271,8 +271,6 @@ MethodTableRow systemMethodTable[] = {
     { "nthvar",    &BddSystemNthvarMethodType,    NULL },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
-    { "unique",	   &BddSystemQuantifyMethodType,  
-      					        (ClientData) BDD_QUANT_UNIQUE },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
     { "~",         &BddSystemNegateMethodType,    NULL },
@@ -1150,6 +1148,7 @@ BddSystemQuantifyMethod(
 	    ckfree(v);
 	    return TCL_ERROR;
 	}	    
+	v[i] = a.var;
     }
 
     /*

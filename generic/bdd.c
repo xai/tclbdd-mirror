@@ -1197,7 +1197,7 @@ Quantify(
 
     for (;;) {
 	Bead* beadPtr = sysPtr->beads + u;
-	if (v == 0) {
+	if (n == 0) {
 	    /*
 	     * No variables remain to quantify. Simply return the expression
 	     * itself.
@@ -1231,24 +1231,11 @@ Quantify(
 	    BDD_UnrefBead(sysPtr,h);
 	    BDD_UnrefBead(sysPtr,l);
 	    break;
-	} else if (q == BDD_QUANT_UNIQUE) {
-	    /* 
-	     * There is a quantified variable that does not appear free in
-	     * the expression.
-	     *
-	     * If the quantifier is UNIQUE, then either value of the variable
-	     * will satisfy the expression equally, and no unique solution
-	     * is possible.
-	     */
-	    r = 0;
-	    ++sysPtr->beads[r].refCount;
-	    break;
 	} else {
 	    /* 
 	     * The current variable does not appear free in the expression,
-	     * and the quantifier is EXISTS or FORALL. The quantification is
-	     * trivially satisfied with respect to the variable in question.
-	     * Advance to the next variable.
+	     * The quantification is trivially satisfied with respect to the
+	     * variable in question. Advance to the next variable.
 	     */
 	    ++v;
 	    --n;

@@ -1222,6 +1222,51 @@ test bdd-14.11 {foreach_sat - unusual return} {*}{
     -result {6 testing}
 }
 
+test bdd-15.n {existential quantifier} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys & expr !e !f; sys & expr expr a
+	sys & term !e  f; sys & term term b; sys | expr expr term
+	sys & term  e !f; sys & term term c; sys | expr expr term
+	sys & term  e  f; sys & term term d; sys | expr expr term
+    }
+    -body {
+	sys | ye a b
+	sys | ye ye c
+	sys | ye ye d
+	sys exists ze {e f} expr
+	expr {[sys beadindex ze] == [sys beadindex ye]}
+    }
+    -cleanup {rename sys {}}
+    -result {1}
+}
+
+test bdd-15.n {universal quantifier} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys & expr !e !f; sys & expr expr a
+	sys & term !e  f; sys & term term b; sys | expr expr term
+	sys & term  e !f; sys & term term c; sys | expr expr term
+	sys & term  e  f; sys & term term d; sys | expr expr term
+    }
+    -body {
+	sys & yu a b
+	sys & yu yu c
+	sys & yu yu d
+	sys forall zu {e f} expr
+	expr {[sys beadindex zu] == [sys beadindex yu]}
+    }
+    -cleanup {rename sys {}}
+    -result {1}
+}
+    
+
 test bdd-21.1 {eight queens} {*}{
     -setup {
 	bdd::system create sys
