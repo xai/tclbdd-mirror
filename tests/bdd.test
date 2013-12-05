@@ -7,7 +7,7 @@
 package require tcltest 2
 namespace import -force ::tcltest::*
 tcltest::loadTestedCommands
-package require bdd
+package require tclbdd
 
 proc evdump {dump nvars node truth varindex} {
     if {$node < 2} {

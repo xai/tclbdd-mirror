@@ -28,14 +28,14 @@ const char* LiteralValues[] = {
     NULL
 };
 enum LiteralIndex {
-    LIT_0,
-    LIT_1,
+    LIT_0 = 0,
+    LIT_1 = 1,
     LIT_BDD_SYSTEM,
     LIT__END
 };
 
 /*
- * Structure that holds per-interpreter data for the ODBC package.
+ * Structure that holds per-interpreter data for the tclbdd package.
  */
 
 typedef struct PerInterpData {
@@ -280,7 +280,7 @@ MethodTableRow systemMethodTable[] = {
 /*
  *-----------------------------------------------------------------------------
  *
- * Bdd_Init --
+ * Tclbdd_Init --
  *
  *	Initialize the 'bdd' package
  *
@@ -294,7 +294,7 @@ MethodTableRow systemMethodTable[] = {
  */
 
 int
-Bdd_Init(Tcl_Interp* interp)
+Tclbdd_Init(Tcl_Interp* interp)
 {
 
     PerInterpData* pidata;	/* Per-interpreter data for the package */
@@ -770,6 +770,10 @@ ForeachSatPre(
     Tcl_Obj* script,		/* Loop body */
     BDD_AllSatState* stateVector) /* State vector for the enumeration */
 {
+    PerInterpData* pidata = sdata->pidata;
+				/* Per-interpreter data */
+    Tcl_Obj** literals = pidata->literals;
+				/* Literal pool */
     BDD_ValueAssignment* v;	/* Value assignments for the current
 				 * satisfier */
     BDD_VariableIndex n;	/* Count of value assignments */
@@ -792,8 +796,7 @@ ForeachSatPre(
     for (i = 0; i < n; ++i) {
 	Tcl_ListObjAppendElement(NULL, sat,
 				 Tcl_NewWideIntObj((Tcl_WideInt) v[i].var));
-	Tcl_ListObjAppendElement(NULL, sat,
-				 Tcl_NewBooleanObj((int) v[i].value));
+	Tcl_ListObjAppendElement(NULL, sat, literals[v[i].value]);
     }
     Tcl_IncrRefCount(sat);
 

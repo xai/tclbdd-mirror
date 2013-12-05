@@ -13,7 +13,7 @@
  * set of operators.  The six trivial truth tables (always true, always
  * false, a, !a, b, !b) are not.
  */
-typedef enum {			/* !a!b !ab a!b ab */
+typedef enum BDD_BinOp {	/* !a!b !ab a!b ab */
 
     /* BDD_BINOP_FALSE = 0x0, */
 
@@ -54,6 +54,31 @@ typedef enum {			/* !a!b !ab a!b ab */
     /* BDD_BINOP_TRUE = 0xf */
 
 } BDD_BinOp;
+
+/*
+ * Ternary operations for use with BDD_Apply3
+ *
+ *	There are 2**2**3 = 256 possible operations. This is merely
+ * a selection of the most useful ones.
+ */
+typedef enum BDD_TernOp {
+    BDD_TERNOP_NOR = 0x01,	/* Logical NOR of three variables */
+    BDD_TERNOP_ONEOF = 0x16,	/* Exactly one of three variables TRUE */
+    BDD_TERNOP_TWOOF = 0x68,	/* Exactly two of three variables TRUE */
+    BDD_TERNOP_XNOR = 0x69,	/* Exclusive NOR: zero or two variables TRUE */
+    BDD_TERNOP_DIFFER = 0x7E,	/* At least one variable differs from
+				* the other two. */
+    BDD_TERNOP_NAND = 0x7F,	/* Logical NAND of three variables */
+    BDD_TERNOP_AND = 0x80,	/* Logical AND of three variables */
+    BDD_TERNOP_CONCUR = 0x81,	/* All three variables agree */
+    BDD_TERNOP_XOR = 0x96,	/* Exclusive OR: one or three variables TRUE */
+    BDD_TERNOP_IFTHENELSE = 0xCA, 
+				/* a ? b : c */
+    BDD_TERNOP_MAJORITY = 0xE8,	/* Majority rule: at least two of three.
+				 * This is also the carry bit of a full
+				 * adder */
+    BDD_TERNOP_OR = 0xFE,	/* Logical OR of three variables */
+} BDD_TernOp;
 
 /*
  * Quantifiers for use with BDD's

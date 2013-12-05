@@ -5,12 +5,6 @@
 #include "bdd.h"
 
 typedef struct Bead Bead;
-typedef struct UIHash1 UIHash1;
-typedef struct UIEntry1 UIEntry1;
-typedef struct UIHash1MP UIHash1MP;
-typedef struct UIEntry1MP UIEntry1MP;
-typedef struct UIHash2 UIHash2;
-typedef struct UIEntry2 UIEntry2;
 typedef struct UIHash2 UIHash3;
 typedef struct UIEntry2 UIEntry3;
 
@@ -66,7 +60,10 @@ struct BDD_AllSatState {
     BDD_BeadIndex* uStack;	/* Stack of beads from the root to the current
 				 * point */
     unsigned char* sStack;	/* Stack of state at each bead */
-    BDD_ValueAssignment* v;	/* Incomplete satisfying assignment */
+    BDD_ValueAssignment* v;	/* Incomplete satisfying assignment.
+				 * This array is of the same size as the
+				 * stack depth and traces the choice of
+				 * variable and value at each level. */
     BDD_VariableIndex depth;	/* Stack depth of the three stacks */
 };
 
@@ -83,70 +80,6 @@ struct Bead {
     BDD_BeadIndex refCount;	/* Reference count of this bead */
     BDD_VariableIndex level;	/* Level in the diagram (in other words,
 				 * the index of the variable being examined) */
-};
-
-/*
- * Structure that represents a hash table with a key comprising a single
- * unsigned integer and a value consisting of a single unsigned integer
- */
-struct UIHash1 {
-    UIEntry1MP* entries;	/* Array of hashtable entries */
-    BDD_BeadIndex* hashes;	/* Array of heads of hash buckets */
-    BDD_BeadIndex unusedEntry;	/* Index of the last unused entry */
-    BDD_BeadIndex entriesAlloc;	/* Count of allocated entries */
-    BDD_BeadIndex hashSize;	/* Count of allocated buckets */
-};
-
-/*
- * Structure that represents a single hash entry in a UIHash1
- */
-struct UIEntry1 {
-    BDD_BeadIndex key;		/* Key */
-    BDD_BeadIndex next;		/* Next hash entry in the same bucket */
-    BDD_BeadIndex value;	/* Value */
-};
-
-/*
- * Structure that represents a hash table with a key comprising a single
- * unsigned integer and a value consisting of a single mp_int
- */
-struct UIHash1MP {
-    UIEntry1MP* entries;	/* Array of hashtable entries */
-    BDD_BeadIndex* hashes;	/* Array of heads of hash buckets */
-    BDD_BeadIndex unusedEntry;	/* Index of the last unused entry */
-    BDD_BeadIndex entriesAlloc;	/* Count of allocated entries */
-    BDD_BeadIndex hashSize;	/* Count of allocated buckets */
-};
-
-/*
- * Structure that represents a single hash entry in a UIHash1MP
- */
-struct UIEntry1MP {
-    BDD_BeadIndex key;		/* Key */
-    BDD_BeadIndex next;		/* Next hash entry in the same bucket */
-    mp_int value;		/* Value */
-};
-
-/*
- * Structure that represents a hash table with a key comprising two
- * unsigned integers and a value consisting of a single one.
- */
-struct UIHash2 {
-    UIEntry2* entries;		/* Array of hashtable entries */
-    BDD_BeadIndex* hashes;	/* Array of heads of hash buckets */
-    BDD_BeadIndex unusedEntry;	/* Index of the last unused entry */
-    BDD_BeadIndex entriesAlloc;	/* Count of allocated entries */
-    BDD_BeadIndex hashSize;	/* Count of allocated buckets */
-};
-
-/*
- * Structure that represents a single hash entry in a UIHash2 
- */
-struct UIEntry2 {
-    BDD_BeadIndex key1;		/* First component of key */
-    BDD_BeadIndex key2;		/* Second component of key */
-    BDD_BeadIndex next;		/* Next hash entry in the same bucket */
-    BDD_BeadIndex value;	/* Value */
 };
 
 #endif 
