@@ -1532,6 +1532,391 @@ test bdd-15.11 {universal quantifier} {*}{
     -result {1}
 }
 
+foreach operation {
+    &3 ^3 ?: borrow concur3 differ3 even3 median nand3 nor3 oneof3 twoof3 |3
+} {
+    test bdd-16.1-$operation "$operation - wrong # args" {*}{
+	-setup {
+	    bdd::system create sys
+	}
+	-body {
+	    sys $operation
+	}
+	-cleanup {rename sys {}}
+	-returnCodes error
+	-match glob
+	-result {wrong # args: *}
+    }	
+}
+
+foreach operation {
+    &3 ^3 ?: borrow concur3 differ3 even3 median nand3 nor3 oneof3 twoof3 |3
+} {
+    test bdd-16.2-$operation {$operation - bad first expr} {*}{
+	-setup {
+	    bdd::system create sys
+	    sys nthvar a 0; sys notnthvar !a 0
+	    sys nthvar b 0; sys notnthvar !b 0
+	    sys nthvar c 0; sys notnthvar !c 0
+	}
+	-body {list [catch {sys $operation z garbage b c} result] \
+		   $result $::errorCode}
+	-cleanup {rename sys {}}
+	-result \
+	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+    }
+}
+
+foreach operation {
+    &3 ^3 ?: borrow concur3 differ3 even3 median nand3 nor3 oneof3 twoof3 |3
+} {
+    test bdd-16.3-$operation {$operation - bad second expr} {*}{
+	-setup {
+	    bdd::system create sys
+	    sys nthvar a 0; sys notnthvar !a 0
+	    sys nthvar b 0; sys notnthvar !b 0
+	    sys nthvar c 0; sys notnthvar !c 0
+	}
+	-body {list [catch {sys $operation z a garbage c} result] \
+		   $result $::errorCode}
+	-cleanup {rename sys {}}
+	-result \
+	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+    }
+}
+
+foreach operation {
+    &3 ^3 ?: borrow concur3 differ3 even3 median nand3 nor3 oneof3 twoof3 |3
+} {
+    test bdd-16.4-$operation {$operation - bad third expr} {*}{
+	-setup {
+	    bdd::system create sys
+	    sys nthvar a 0; sys notnthvar !a 0
+	    sys nthvar b 0; sys notnthvar !b 0
+	    sys nthvar c 0; sys notnthvar !c 0
+	}
+	-body {list [catch {sys $operation z a b garbage} result] \
+		   $result $::errorCode}
+	-cleanup {rename sys {}}
+	-result \
+	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+    }
+}
+
+test bdd-16.5 {ternary nor} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+    }
+    -body {
+	sys nor3 y p q r
+	sys | t p q
+	sys | t t r
+	sys ~ z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.6 {ternary oneof} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys oneof3 y p q r
+	sys & z p !q
+	sys & z z !r
+	sys & t !p q
+	sys & t t !r
+	sys | z z t
+	sys & t !p !q
+	sys & t t r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.7 {ternary twoof} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys twoof3 y p q r
+	sys & z p q
+	sys & z z !r
+	sys & t p !q
+	sys & t t r
+	sys | z z t
+	sys & t !p q
+	sys & t t r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.7 {ternary even} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys even3 y p q r
+	sys ^ z p q
+	sys ^ z z !r
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.8 {ternary differ} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys differ3 y p q r
+	sys &3 z p q r
+	sys &3 t !p !q !r
+	sys nor z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.9 {ternary nand} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys nand3 y p q r
+	sys &3 z p q r
+	sys ~ z z
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.10 {ternary concurrence} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys concur3 y p q r
+	sys &3 z p q r
+	sys &3 t !p !q !r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.11 {ternary - borrow bit of subtraction} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys borrow y p q r
+	sys &3 z !p !q  r
+	sys &3 t !p  q !r
+	sys | z z t
+	sys &3 t !p  q  r
+	sys | z z t
+	sys &3 t  p  q  r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.12 {ternary - borrow bit of subtraction} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys borrow y p q r
+	sys &3 z !p !q  r
+	sys &3 t !p  q !r
+	sys | z z t
+	sys &3 t !p  q  r
+	sys | z z t
+	sys &3 t  p  q  r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.13 {ternary - xor} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys ^3 y p q r
+	sys ^ z p q
+	sys ^ z z r
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.14 {ternary - ?:} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys ?: y p q r
+	sys & z p q
+	sys & t !p r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.15 {ternary - median} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys median y p q r
+	sys &3 z p q !r
+	sys &3 t p !q r
+	sys | z z t
+	sys &3 t !p q r
+	sys | z z t
+	sys &3 t p q r
+	sys | z z t
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-16.16 {ternary - or} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2;
+	sys nthvar d 3; sys nthvar e 4; sys nthvar f 5;
+	sys & p a d
+	sys & q b e
+	sys & r c f
+	sys ~ !p p
+	sys ~ !q q
+	sys ~ !r r
+    }
+    -body {
+	sys |3 y p q r
+	sys | z p q
+	sys | z z r
+	expr {[sys beadindex y] == [sys beadindex z]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
 test bdd-21.1 {eight queens} {*}{
     -setup {
 	bdd::system create sys

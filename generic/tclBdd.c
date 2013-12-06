@@ -295,6 +295,7 @@ MethodTableRow systemMethodTable[] = {
     { "twoof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_TWOOF },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
+    { "|3",        &BddSystemTernopMethodType,    (ClientData) BDD_TERNOP_OR },
     { "~",         &BddSystemNegateMethodType,    NULL },
     { NULL,	   NULL,                          NULL }
 };
