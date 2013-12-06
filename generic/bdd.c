@@ -31,6 +31,9 @@ static void AddToHash(BDD_System*, BDD_BeadIndex);
 static unsigned int Bead2HashKeyProc(Tcl_HashTable*, void*);
 static int Bead2HashKeyComparator(void*, Tcl_HashEntry*);
 static Tcl_HashEntry* Bead2HashEntryAlloc(Tcl_HashTable*, void*);
+static unsigned int Bead3HashKeyProc(Tcl_HashTable*, void*);
+static int Bead3HashKeyComparator(void*, Tcl_HashEntry*);
+static Tcl_HashEntry* Bead3HashEntryAlloc(Tcl_HashTable*, void*);
 static int FindInHash(BDD_System*, BDD_VariableIndex, BDD_BeadIndex,
 		      BDD_BeadIndex high);
 				/* Find a bead in the system hash */
@@ -67,6 +70,28 @@ Tcl_HashKeyType Bead2KeyType = {
     Bead2HashEntryAlloc,	/* allocator */
     NULL			/* standard deallocator */
 };
+
+/*
+ * Hash entry type for an object indexed by three bead indices
+ */
+typedef struct Bead3HashEntry {
+    Tcl_HashEntry parent;	/* Based on the Tcl_HashEntry */
+    BDD_BeadIndex beads[3];	/* The two bead indices */
+} Bead3HashEntry;
+
+/*
+ * Hash key type for an object indexed by two bead indices
+ */
+
+Tcl_HashKeyType Bead3KeyType = {
+    TCL_HASH_KEY_TYPE_VERSION,	/* version */
+    0,				/* flags */
+    Bead3HashKeyProc,		/* hash procedure */
+    Bead3HashKeyComparator,	/* comparator */
+    Bead3HashEntryAlloc,	/* allocator */
+    NULL			/* standard deallocator */
+};
+
 /*
  *-----------------------------------------------------------------------------
  *
@@ -263,6 +288,83 @@ Bead2HashEntryAlloc(
     BDD_BeadIndex* outBeads = (BDD_BeadIndex*) &(entryPtr->key.oneWordValue);
     outBeads[0] = beads[0];
     outBeads[1] = beads[1];
+    return entryPtr;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * Bead3HashKeyProc --
+ *
+ *	Compute a hashcode from a triple of bead indices
+ *
+ * Results:
+ *	Returns the computed hashcode.
+ */
+
+static unsigned int
+Bead3HashKeyProc(
+    Tcl_HashTable* hashTable,	/* Hash table being processed */
+    void* key)			/* Key */
+{
+    BDD_BeadIndex* beads = (BDD_BeadIndex*) key;
+    return HashTriple(beads[0], beads[1], beads[2]);
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * Bead3HashKeyComparator --
+ *
+ *	Compares the keys in a hash table indexed by two bead indices
+ *
+ * Results:
+ *	Returns 1 if the keys are equal, 0 otherwise.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+Bead3HashKeyComparator(
+    void* key1VPtr,		/* Pointer to the first key */
+    Tcl_HashEntry* entryPtr)
+				/* Pointer to a hash entry containing the
+				 * second key */
+{
+    BDD_BeadIndex* key1Ptr = (BDD_BeadIndex*) key1VPtr;
+    BDD_BeadIndex* key2Ptr = (BDD_BeadIndex*) &(entryPtr->key.oneWordValue);
+;
+    return (key1Ptr[0] == key2Ptr[0]
+	    && key1Ptr[1] == key2Ptr[1]
+	    && key1Ptr[2] == key2Ptr[2]);
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * Bead3HashEntryAlloc --
+ *
+ *	Allocates a hash entry containing two BDD_BeadIndex keys
+ *
+ * Results:
+ *	Returns the allocated entry
+ *
+ *-----------------------------------------------------------------------------
+ */
+static Tcl_HashEntry*
+Bead3HashEntryAlloc(
+    Tcl_HashTable* tablePtr,	/* Hash table */
+    void* keyPtr		/* Key */
+) {
+    BDD_BeadIndex* beads = (BDD_BeadIndex*) keyPtr;
+    Tcl_HashEntry* entryPtr =
+	(Tcl_HashEntry*) ckalloc(sizeof(Tcl_HashEntry)
+				 - sizeof(entryPtr->key)
+				 + 3 * sizeof(BDD_BeadIndex));
+    BDD_BeadIndex* outBeads = (BDD_BeadIndex*) &(entryPtr->key.oneWordValue);
+    outBeads[0] = beads[0];
+    outBeads[1] = beads[1];
+    outBeads[2] = beads[2];
     return entryPtr;
 }
 
@@ -999,6 +1101,9 @@ Apply(
     BDD_BeadIndex result;	/* Return value */
     Tcl_HashEntry* entry;	/* Pointer to the entry in the
 				 * cache of beads for this operation */
+    BDD_BinOp opmask;		/* Mask of relevant bits for this operation */
+
+    /* Check if the result is already hashed */
 
     u[0] = u1;
     u[1] = u2;
@@ -1006,37 +1111,95 @@ Apply(
     if (!newFlag) {
 	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
 	++sysPtr->beads[result].refCount;
-    } else if (u1 <= 1 && u2 <= 1) {
-	unsigned int i = ((unsigned int)u1 << 1) + (unsigned int)u2;
-	result = ((op>>i) & 1);
-	++sysPtr->beads[result].refCount;
     } else {
-	if (u1Ptr->level == u2Ptr->level) {
-	    level = u1Ptr->level;
-	    low1 = u1Ptr->low;
-	    high1 = u1Ptr->high;
-	    low2 = u2Ptr->low;
-	    high2 = u2Ptr->high;
-	    l = Apply(sysPtr, G, op, low1, low2);
-	    h = Apply(sysPtr, G, op, high1, high2);
-	} else if (u1Ptr->level < u2Ptr->level) {
-	    level = u1Ptr->level;
-	    low1 = u1Ptr->low;
-	    high1 = u1Ptr->high;
-	    l = Apply(sysPtr, G, op, low1, u2);
-	    h = Apply(sysPtr, G, op, high1, u2);
-	} else /* u1Ptr->level > u2Ptr->level */ {
-	    level = u2Ptr->level;
-	    low2 = u2Ptr->low;
-	    high2 = u2Ptr->high;
-	    l = Apply(sysPtr, G, op, u1, low2);
-	    h = Apply(sysPtr, G, op, u1, high2);
+
+	/* 
+	 * Check if the result is constant or a copy of one of the operands
+	 */
+	opmask = 0xF;
+	if (u1 == 0) {
+	    opmask &= 0x3;
+	} else if (u1 == 1) {
+	    opmask &= 0xC;
 	}
-	result = BDD_MakeBead(sysPtr, level, l, h);
-	BDD_UnrefBead(sysPtr, l);
-	BDD_UnrefBead(sysPtr, h);
+	if (u2 == 0) {
+	    opmask &= 0x5;
+	} else if (u2 == 1) {
+	    opmask &= 0xA;
+	}
+	if ((op & opmask) == 0) {
+	    /* 
+	     * Result is constant zero 
+	     */
+	    result = 0;
+	    ++sysPtr->beads[result].refCount;
+	} else if ((op & opmask) == opmask) {
+	    /* 
+	     * Result is constant one 
+	     */
+	    result = 1;
+	    ++sysPtr->beads[result].refCount;
+	} else if ((op & opmask) == (0xC & opmask)) {
+	    /*
+	     * Result is the left operand
+	     */
+	    result = u1;
+	    ++sysPtr->beads[result].refCount;
+	} else if ((op & opmask) == (0xA & opmask)) {
+	    /*
+	     * Result is the right operand
+	     */
+	    result = u2;
+	    ++sysPtr->beads[result].refCount;
+	} else {
+	    
+	    /*
+	     * Result is not constant. Apply recursively to the subexpression
+	     * with the earlier top variable.
+	     */
+	    if (u1Ptr->level == u2Ptr->level) {
+		/*
+		 * Both subexpressions have the same top variable
+		 */
+		level = u1Ptr->level;
+		low1 = u1Ptr->low;
+		high1 = u1Ptr->high;
+		low2 = u2Ptr->low;
+		high2 = u2Ptr->high;
+		l = Apply(sysPtr, G, op, low1, low2);
+		h = Apply(sysPtr, G, op, high1, high2);
+	    } else if (u1Ptr->level < u2Ptr->level) {
+		/*
+		 * Apply first to the left-hand operand
+		 */
+		level = u1Ptr->level;
+		low1 = u1Ptr->low;
+		high1 = u1Ptr->high;
+		l = Apply(sysPtr, G, op, low1, u2);
+		h = Apply(sysPtr, G, op, high1, u2);
+	    } else /* u1Ptr->level > u2Ptr->level */ {
+		/*
+		 * Apply first to the right-hand operand
+		 */
+		level = u2Ptr->level;
+		low2 = u2Ptr->low;
+		high2 = u2Ptr->high;
+		l = Apply(sysPtr, G, op, u1, low2);
+		h = Apply(sysPtr, G, op, u1, high2);
+	    }
+	    /*
+	     * Compose the subexpressions
+	     */
+	    result = BDD_MakeBead(sysPtr, level, l, h);
+	    BDD_UnrefBead(sysPtr, l);
+	    BDD_UnrefBead(sysPtr, h);
+	}
+	/*
+	 * Cache the result
+	 */
+	++sysPtr->beads[result].refCount;
+	Tcl_SetHashValue(entry, result);
     }
-    Tcl_SetHashValue(entry, result);
     return result;
 }
 
@@ -1047,11 +1210,197 @@ BDD_Apply(
     BDD_BeadIndex u1,		/* Left operand */
     BDD_BeadIndex u2) 		/* Right operand */
 {
-    Tcl_HashTable G;
+    Tcl_HashTable G;		/* Cache of partial results */
+    Tcl_HashSearch search;	/* Search for clearing the cache */
+    Tcl_HashEntry* entryPtr;	/* Hash entyr for clearing the cache */
     Tcl_InitCustomHashTable(&G, TCL_CUSTOM_TYPE_KEYS, &Bead2KeyType);
-    BDD_BeadIndex entry = Apply(sysPtr, &G, op, u1, u2);
+    BDD_BeadIndex result = Apply(sysPtr, &G, op, u1, u2);
+    for (entryPtr = Tcl_FirstHashEntry(&G, &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
     Tcl_DeleteHashTable(&G);
-    return entry;
+    return result;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_Apply3 --
+ *
+ *	Applies a Boolean operator among three BDD's.
+ *
+ * Results:
+ *	Returns the resulting BDD.
+ *
+ * Side effects:
+ *	Resulting BDD has a ref count of one plus any previously extant
+ *	references. Caller should decrement the ref count when done.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static BDD_BeadIndex
+Apply3(
+    BDD_System* sysPtr,		/* System of BDD's */
+    Tcl_HashTable* G,		/* Hash table of partial results */
+    BDD_TernOp op,		/* Operation to apply */
+    BDD_BeadIndex u1,		/* First operand */
+    BDD_BeadIndex u2,		/* Second operand */
+    BDD_BeadIndex u3) 		/* Third operand */
+{
+    Bead* beads = sysPtr->beads; /* Bead table */
+    BDD_BeadIndex u[3];		 /* Bead indices for left- and right-hand 
+				  * sides */
+    Bead* u1Ptr = beads + u1;	/* Pointer to the left-hand bead */
+    Bead* u2Ptr = beads + u2;	/* Pointer to the right-hand bead */
+    Bead* u3Ptr = beads + u3;	/* Pointer to the right-hand bead */
+    BDD_VariableIndex level;	/* Level of the result */
+    BDD_BeadIndex low1, high1;	/* Low and high transitions of the first bead */
+    BDD_BeadIndex low2, high2;	/* Low and high transitions of the
+				 * second bead */
+    BDD_BeadIndex low3, high3;	/* Low and high transitions of the third bead */
+    BDD_BeadIndex l, h;	        /* Low and high transitions of the result */
+    int newFlag;		/* Flag==1 if the output is a new bead */
+    BDD_BeadIndex result;	/* Return value */
+    Tcl_HashEntry* entry;	/* Pointer to the entry in the
+				 * cache of beads for this operation */
+    BDD_TernOp opmask;		/* Mask of relevant bits for this operation */
+    BDD_TernOp opfiltered;	/* Operation masked with 'opmask' */
+
+    /* Check if the result is already hashed */
+
+    u[0] = u1;
+    u[1] = u2;
+    u[2] = u3;
+    entry = Tcl_CreateHashEntry(G, u, &newFlag);
+    if (!newFlag) {
+	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
+	++sysPtr->beads[result].refCount;
+    } else {
+
+	/* 
+	 * Check if the result is constant or equal to one of the operands
+	 */
+	opmask = 0xFF;
+	if (u1 == 0) {
+	    opmask &= 0x0F;
+	} else if (u1 == 1) {
+	    opmask &= 0xF0;
+	}
+	if (u2 == 0) {
+	    opmask &= 0x33;
+	} else if (u2 == 1) {
+	    opmask &= 0xCC;
+	}
+	if (u3 == 0) {
+	    opmask &= 0x55;
+	} else if (u3 == 1) {
+	    opmask &= 0xAA;
+	}
+	opfiltered = op & opmask;
+	if (opfiltered == 0) {
+	    /* 
+	     * Result is constant zero 
+	     */
+	    result = 0;
+	    ++sysPtr->beads[result].refCount;
+	} else if (opfiltered == opmask) {
+	    /* 
+	     * Result is constant one 
+	     */
+	    result = 1;
+	    ++sysPtr->beads[result].refCount;
+	} else if (opfiltered == (0xF0 & opmask)) {
+	    /*
+	     * Result is the first operand
+	     */
+	    result = u1;
+	    ++sysPtr->beads[result].refCount;
+	} else if (opfiltered == (0xCC & opmask)) {
+	    /*
+	     * Result is the second operand
+	     */
+	    result = u2;
+	    ++sysPtr->beads[result].refCount;
+	} else if (opfiltered == (0xAA & opmask)) {
+	    /*
+	     * Result is the third operand
+	     */
+	    result = u3;
+	    ++sysPtr->beads[result].refCount;
+	} else {
+	    /*
+	     * Result is not constant. Find the top variable
+	     */
+	    level = u1Ptr->level;
+	    if (u2Ptr->level < level) level = u2Ptr->level;
+	    if (u3Ptr->level < level) level = u3Ptr->level;
+	    /*
+	     * Split the expressions at the top variable
+	     */
+	    if (u1Ptr->level > level) {
+		low1 = u1;
+		high1 = u1;
+	    } else {
+		low1 = u1Ptr->low;
+		high1 = u1Ptr->high;
+	    }
+	    if (u2Ptr->level > level) {
+		low2 = u2;
+		high2 = u2;
+	    } else {
+		low2 = u2Ptr->low;
+		high2 = u2Ptr->high;
+	    }
+	    if (u3Ptr->level > level) {
+		low3 = u3;
+		high3 = u3;
+	    } else {
+		low3 = u3Ptr->low;
+		high3 = u3Ptr->high;
+	    }
+	    /*
+	     * Compute the two branches from the top variable
+	     */
+	    l = Apply3(sysPtr, G, op, low1, low2, low3);
+	    h = Apply3(sysPtr, G, op, high1, high2, high3);
+	    /*
+	     * Compose the subexpressions
+	     */
+	    result = BDD_MakeBead(sysPtr, level, l, h);
+	    BDD_UnrefBead(sysPtr, l);
+	    BDD_UnrefBead(sysPtr, h);
+	}
+	/*
+	 * Cache the result
+	 */
+	++sysPtr->beads[result].refCount;
+	Tcl_SetHashValue(entry, result);
+    }
+    return result;
+}
+BDD_BeadIndex
+BDD_Apply3(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_TernOp op,		/* Operation to apply */
+    BDD_BeadIndex u1,		/* First operand */
+    BDD_BeadIndex u2, 		/* Second operand */
+    BDD_BeadIndex u3)		/* Third operand */
+{
+    Tcl_HashTable G;		/* Cache of partial results */
+    Tcl_HashSearch search;	/* Search for clearing the cache */
+    Tcl_HashEntry* entryPtr;	/* Hash entyr for clearing the cache */
+    Tcl_InitCustomHashTable(&G, TCL_CUSTOM_TYPE_KEYS, &Bead3KeyType);
+    BDD_BeadIndex result = Apply3(sysPtr, &G, op, u1, u2, u3);
+    for (entryPtr = Tcl_FirstHashEntry(&G, &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&G);
+    return result;
 }
 
 /*

@@ -127,6 +127,8 @@ static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemSatcountMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
+static int BddSystemTernopMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				 int, Tcl_Obj* const[]);
 static int BddSystemUnsetMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
 static int CloneBddSystemObject(Tcl_Interp*, ClientData, ClientData*);
@@ -235,6 +237,13 @@ const static Tcl_MethodType BddSystemSatcountMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemTernopMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "ternop",			   /* name */
+    BddSystemTernopMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};				   /* common to all ternary operators */
 const static Tcl_MethodType BddSystemUnsetMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "unset",			   /* name */
@@ -250,6 +259,7 @@ const static Tcl_MethodType BddSystemUnsetMethodType = {
 MethodTableRow systemMethodTable[] = {
     { "!=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NE },
     { "&",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_AND },
+    { "&3",        &BddSystemTernopMethodType,    (ClientData) BDD_TERNOP_AND },
     { ":=",        &BddSystemCopyMethodType,      NULL },
     { "<",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LT },
     { "<=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_LE },
@@ -257,24 +267,36 @@ MethodTableRow systemMethodTable[] = {
     { ">",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_GT },
     { ">=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_GE },
     { "^",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_XOR },
+    { "^3",        &BddSystemTernopMethodType,    (ClientData) BDD_TERNOP_XOR },
+    { "?:",        &BddSystemTernopMethodType,    
+                                           (ClientData) BDD_TERNOP_IFTHENELSE },
     { "beadindex", &BddSystemBeadindexMethodType, NULL },
+    { "borrow",    &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_BORROW },
+    { "concur3",   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_CONCUR },
+    { "differ3",   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_DIFFER },
     { "dump",      &BddSystemDumpMethodType,      NULL },
+    { "even3",     &BddSystemTernopMethodType,   (ClientData) BDD_TERNOP_EVEN },
     { "exists",	   &BddSystemQuantifyMethodType,  
       					        (ClientData) BDD_QUANT_EXISTS },
     { "forall",	   &BddSystemQuantifyMethodType,  
       					        (ClientData) BDD_QUANT_FORALL },
     { "foreach_sat",
                    &BddSystemForeachSatMethodType,NULL },
+    { "median" ,   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_MEDIAN },
     { "nand",      &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NAND },
+    { "nand3",     &BddSystemTernopMethodType,   (ClientData) BDD_TERNOP_NAND },
     { "nor",       &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NOR },
+    { "nor3",      &BddSystemTernopMethodType,    (ClientData) BDD_TERNOP_NOR },
     { "notnthvar", &BddSystemNotnthvarMethodType, NULL },
     { "nthvar",    &BddSystemNthvarMethodType,    NULL },
+    { "oneof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_ONEOF },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
+    { "twoof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_TWOOF },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
     { "~",         &BddSystemNegateMethodType,    NULL },
-    { NULL,	   NULL,                         NULL }
+    { NULL,	   NULL,                          NULL }
 };
 
 /*
@@ -1077,7 +1099,7 @@ BddSystemNotnthvarMethod(
  * Usage:
  *	$system exists $name $vars $expr
  *	$system forall $name $vars $expr
- *	$system unique $name $vars $expr
+ *	$system unique $name $vars $expr  (NOT YET IMPLEMENTED)
  *
  * Parameters:
  *	system - System of BDD's
@@ -1159,7 +1181,12 @@ BddSystemQuantifyMethod(
      */
     qsort(v, varc, sizeof(BDD_VariableIndex), CompareVariableIndices);
 
+    /*
+     * Quantify the formula
+     */
     result = BDD_Quantify(sdata->system, q, v, varc, u);
+
+    ckfree(v);
     SetNamedExpression(sdata, objv[skipped], result);
     BDD_UnrefBead(sdata->system, result);
     return TCL_OK;
@@ -1314,6 +1341,75 @@ BddSystemSatcountMethod(
     BDD_SatCount(sdata->system, beadIndex, &satCount);
     Tcl_SetObjResult(interp, Tcl_NewBignumObj(&satCount));
 
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemTernopMethod --
+ *
+ *	Computes a ternary operation among three expressions in a BDD system
+ *	and assigns it a name
+ *
+ * Usage:
+ *	$system OP a b c d
+ *
+ * Parameters:
+ *	OP - One of the ternary operators
+ *	a - Name of the result expression
+ *	b - Name of the first operand
+ *	c - Name of the second operand
+ *	d - Name of the third operand
+ *
+ * Results:
+ *	None
+ *
+ * Side effects:
+ *	Assigns the given name to the result expression
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemTernopMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex beadIndexOpd1; /* The bead index of the first operand */
+    BDD_BeadIndex beadIndexOpd2; /* The bead index of the second operand */
+    BDD_BeadIndex beadIndexOpd3; /* The bead index of the third operand */
+    BDD_BeadIndex beadIndexResult; /* The bead index of the result */
+
+    /* Check syntax */
+
+    if (objc != skipped+4) {
+	Tcl_WrongNumArgs(interp, skipped, objv,
+			 "result operand1 operand2 operand3");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
+			    &beadIndexOpd1) != TCL_OK
+	|| FindNamedExpression(interp, sdata, objv[skipped+2],
+			       &beadIndexOpd2) != TCL_OK
+	|| FindNamedExpression(interp, sdata, objv[skipped+3],
+			       &beadIndexOpd3) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    beadIndexResult = BDD_Apply3(sdata->system, (BDD_TernOp) (size_t)clientData,
+				 beadIndexOpd1, beadIndexOpd2, beadIndexOpd3);
+    SetNamedExpression(sdata, objv[skipped], beadIndexResult);
+    BDD_UnrefBead(sdata->system, beadIndexResult);
     return TCL_OK;
 }
 

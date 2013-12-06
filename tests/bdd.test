@@ -1222,7 +1222,273 @@ test bdd-14.11 {foreach_sat - unusual return} {*}{
     -result {6 testing}
 }
 
-test bdd-15.n {existential quantifier} {*}{
+test bdd-15.1.1 {quantifiers - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys exists
+    }
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-15.1.2 {quantifiers - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys forall
+    }
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-15.2.1 {quantifiers - bad expression} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists x {} garbage} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-15.2.2 {quantifiers - bad expression} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys forall x {} garbage} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-15.3.1 {quantifiers - ill-formed list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys exists x \{ 1
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -returnCodes error
+    -result {unmatched open brace in list}
+}
+
+test bdd-15.3.2 {quantifiers - ill-formed list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys forall x \{ 1
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -returnCodes error
+    -result {unmatched open brace in list}
+}
+
+test bdd-15.4.1 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists x {garbage} 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-15.4.2 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys forall x {garbage} 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-15.5.1 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists x {1} 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {1 is not a variable} {BDD NotVariable 1}}
+}
+
+test bdd-15.5.2 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys forall x {1} 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {1 is not a variable} {BDD NotVariable 1}}
+}
+
+test bdd-15.6.1 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys notnthvar !a 0
+    }
+    -body {
+	list [catch {sys exists x !a 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {!a is not a variable} {BDD NotVariable !a}}
+}
+
+test bdd-15.6.2 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys notnthvar !a 0
+    }
+    -body {
+	list [catch {sys forall x !a 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {!a is not a variable} {BDD NotVariable !a}}
+}
+
+test bdd-15.7.1 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys ^ c a b
+    }
+    -body {
+	list [catch {sys exists x c 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result {1 {c is not a variable} {BDD NotVariable c}}
+}
+
+test bdd-15.7.2 {quantifiers - bad variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys ^ c a b
+    }
+    -body {
+	list [catch {sys forall x c 1} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result {1 {c is not a variable} {BDD NotVariable c}}
+}
+
+test bdd-15.8.1 {quantifiers - do nothing gracefully} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys ^ c a b
+    }
+    -body {
+	set result {}
+	foreach ex {0 1 a b c} {
+	    sys exists z {} $ex
+	    lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
+	}
+	set result
+    }
+    -cleanup {rename sys {}}
+    -result {1 1 1 1 1}
+}
+
+test bdd-15.8.2 {quantifiers - do nothing gracefully} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys ^ c a b
+    }
+    -body {
+	set result {}
+	foreach ex {0 1 a b c} {
+	    sys forall z {} $ex
+	    lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
+	}
+	set result
+    }
+    -cleanup {rename sys {}}
+    -result {1 1 1 1 1}
+}
+
+test bdd-15.9.1 {quantifiers - irrelevant variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar p 0
+	sys nthvar a 1
+	sys nthvar q 2
+	sys nthvar b 3
+	sys nthvar r 4
+	sys ^ c a b
+    }
+    -body {
+	set result {}
+	foreach v {p q r} {
+	    foreach ex {0 1 a b c} {
+		sys exists z $v $ex
+		lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
+	    }
+	}
+	set result
+    }
+    -cleanup {rename sys {}}
+    -result {1 1 1 1 1 1 1 1 1 1 1 1 1 1 1}
+}
+
+test bdd-15.9.2 {quantifiers - irrelevant variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar p 0
+	sys nthvar a 1
+	sys nthvar q 2
+	sys nthvar b 3
+	sys nthvar r 4
+	sys ^ c a b
+    }
+    -body {
+	set result {}
+	foreach v {p q r} {
+	    foreach ex {0 1 a b c} {
+		sys forall z $v $ex
+		lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
+	    }
+	}
+	set result
+    }
+    -cleanup {rename sys {}}
+    -result {1 1 1 1 1 1 1 1 1 1 1 1 1 1 1}
+}
+
+test bdd-15.10 {existential quantifier} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
@@ -1244,7 +1510,7 @@ test bdd-15.n {existential quantifier} {*}{
     -result {1}
 }
 
-test bdd-15.n {universal quantifier} {*}{
+test bdd-15.11 {universal quantifier} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
@@ -1265,7 +1531,6 @@ test bdd-15.n {universal quantifier} {*}{
     -cleanup {rename sys {}}
     -result {1}
 }
-    
 
 test bdd-21.1 {eight queens} {*}{
     -setup {

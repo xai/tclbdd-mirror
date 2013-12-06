@@ -65,18 +65,19 @@ typedef enum BDD_TernOp {
     BDD_TERNOP_NOR = 0x01,	/* Logical NOR of three variables */
     BDD_TERNOP_ONEOF = 0x16,	/* Exactly one of three variables TRUE */
     BDD_TERNOP_TWOOF = 0x68,	/* Exactly two of three variables TRUE */
-    BDD_TERNOP_XNOR = 0x69,	/* Exclusive NOR: zero or two variables TRUE */
-    BDD_TERNOP_DIFFER = 0x7E,	/* At least one variable differs from
-				* the other two. */
+    BDD_TERNOP_EVEN = 0x69,	/* Exclusive NOR: zero or two variables TRUE */
+    BDD_TERNOP_DIFFER = 0x7E,	/* 1 or 2 variables TRUE - disagreement. */
     BDD_TERNOP_NAND = 0x7F,	/* Logical NAND of three variables */
     BDD_TERNOP_AND = 0x80,	/* Logical AND of three variables */
     BDD_TERNOP_CONCUR = 0x81,	/* All three variables agree */
+    BDD_TERNOP_BORROW = 0x8E,	/* Borrow bit of a full subtractor */
+                                /* -(a-b-c) < 0 */
     BDD_TERNOP_XOR = 0x96,	/* Exclusive OR: one or three variables TRUE */
-    BDD_TERNOP_IFTHENELSE = 0xCA, 
-				/* a ? b : c */
-    BDD_TERNOP_MAJORITY = 0xE8,	/* Majority rule: at least two of three.
-				 * This is also the carry bit of a full
-				 * adder */
+    BDD_TERNOP_IFTHENELSE = 0xCA, /* a ? b : c */
+    BDD_TERNOP_MEDIAN = 0xE8,	/* Majority rule: at least two of three. */
+				/* This function is the median of the three */
+				/* variables. This function is also the */
+				/* carry bit of a full adder: (a+b+c) > 1 */
     BDD_TERNOP_OR = 0xFE,	/* Logical OR of three variables */
 } BDD_TernOp;
 
@@ -84,8 +85,9 @@ typedef enum BDD_TernOp {
  * Quantifiers for use with BDD's
  */
 typedef enum BDD_Quantifier {
-    BDD_QUANT_FORALL = BDD_BINOP_AND,
-    BDD_QUANT_EXISTS = BDD_BINOP_OR,
+    BDD_QUANT_FORALL = BDD_BINOP_AND, /* Universal quantification */
+    /* BDD_QUANT_UNIQUE - BDD_BINOP_XOR, Unique quantification is not working */
+    BDD_QUANT_EXISTS = BDD_BINOP_OR,  /* Existential quantification */
 } BDD_Quantifier;
 
 typedef struct BDD_System BDD_System;
@@ -135,6 +137,9 @@ extern BDDAPI int BDD_Literal(BDD_System* sysPtr, BDD_BeadIndex expr,
 extern BDDAPI BDD_BeadIndex BDD_Negate(BDD_System* sysPtr, BDD_BeadIndex u);
 extern BDDAPI BDD_BeadIndex BDD_Apply(BDD_System* sysPtr, BDD_BinOp op,
 				      BDD_BeadIndex u1, BDD_BeadIndex u2);
+extern BDDAPI BDD_BeadIndex BDD_Apply3(BDD_System* sysPtr, BDD_TernOp op,
+				       BDD_BeadIndex u1, BDD_BeadIndex u2,
+				       BDD_BeadIndex u3);
 extern BDDAPI BDD_BeadIndex BDD_Restrict(BDD_System* sysPtr,
 					 BDD_BeadIndex u,
 					 const BDD_ValueAssignment r[],
