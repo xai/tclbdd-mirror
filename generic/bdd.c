@@ -1202,7 +1202,6 @@ Apply(
     }
     return result;
 }
-
 BDD_BeadIndex
 BDD_Apply(
     BDD_System* sysPtr,		/* System of BDD's */
@@ -1278,8 +1277,15 @@ Apply3(
     if (!newFlag) {
 	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
 	++sysPtr->beads[result].refCount;
+    } else if (op == BDD_TERNOP_IFTHENELSE && u2 == u3) {
+	/*
+	 * Special case - if the op is IFTHENELSE, and both the IF and
+	 * ELSE cases are the same bead, we can prune the search.
+	 * (This case is here because it helps performance in Compose)
+	 */
+	result = u2;
+	++sysPtr->beads[result].refCount;
     } else {
-
 	/* 
 	 * Check if the result is constant or equal to one of the operands
 	 */
@@ -1417,7 +1423,7 @@ BDD_Apply3(
  *
  * Notes:
  *	The restrictions must be listed in ascending order by variable
- *	number.
+ *	number. The values of r[].value must be Boolean constants.
  *
  *-----------------------------------------------------------------------------
  */
@@ -1445,13 +1451,14 @@ Restrict(
     /* Has this value been computed already? */
 
     entryPtr = Tcl_CreateHashEntry(H, u, &newFlag);
-    if (newFlag) {
-	Tcl_SetHashValue(entryPtr, 0);
-    }
-    BDD_BeadIndex cached = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
-    if (cached != 0) {
-	++sysPtr->beads[cached].refCount;
-	return cached;
+    if (!newFlag) {
+	result = (BDD_BeadIndex)(size_t)Tcl_GetHashValue(entryPtr);
+	if (result != !(BDD_BeadIndex)0) {
+	    ++sysPtr->beads[result].refCount;
+	    return result;
+	}
+    } else {
+	Tcl_SetHashValue(entryPtr, ~(BDD_BeadIndex)0);
     }
 
     /*
@@ -1459,6 +1466,16 @@ Restrict(
      */
     BDD_BeadIndex rvar = r[0].var;
     BDD_BeadIndex uvar = sysPtr->beads[u].level;
+    if (n > 1) {
+	/*
+	 * Consistency check on variable ordering.
+	 */
+	BDD_BeadIndex nextvar = r[1].var;
+	if (nextvar <= rvar) {
+	    Tcl_Panic("variables %lu and %lu in BDD_Restrict are out of order.",
+		      rvar, nextvar);
+	}
+    }
     if (rvar < uvar) {
 	/*
 	 * r[0] is an irrelevant variable in u
@@ -1468,10 +1485,14 @@ Restrict(
 	/*
 	 * r[0] appears in u. Bind it.
 	 */
-	if (r[0].value) {
+	if (r[0].value == 0) {
+	    result = Restrict(H, sysPtr, sysPtr->beads[u].low, r+1, n-1);
+	} else if (r[0].value == 1) {
 	    result = Restrict(H, sysPtr, sysPtr->beads[u].high, r+1, n-1);
 	} else {
-	    result = Restrict(H, sysPtr, sysPtr->beads[u].low, r+1, n-1);
+	    Tcl_Panic("BDD_Restrict called with non-constant value for "
+		      "variable %lu\n", rvar);
+	    result = 0;		/* silence compiler warnings */
 	}
     } else /* rvar > uvar */ {
 	/*
@@ -1522,8 +1543,9 @@ BDD_Restrict(
 
 static BDD_BeadIndex
 Quantify(
-    Tcl_HashTable* H,		/* Hash table of cached partial results */
     BDD_System* sysPtr,		/* Pointer to the system of BDD's */
+    Tcl_HashTable* G,	        /* Cached partial results of Apply */
+    Tcl_HashTable* H,		/* Cached partial results of Quantify */
     BDD_Quantifier q,		/* Quantifier to apply */
     const BDD_VariableIndex* v,	/* Variables to quantify */
     BDD_VariableIndex n,	/* Number of quantified variables */
@@ -1559,8 +1581,8 @@ Quantify(
 	     * The current variable in the expression is unquantified.
 	     * Quantify the two subexpressions and make the result
 	     */
-	    l = Quantify(H, sysPtr, q, v, n, beadPtr->low);
-	    h = Quantify(H, sysPtr, q, v, n, beadPtr->high);
+	    l = Quantify(sysPtr, G, H, q, v, n, beadPtr->low);
+	    h = Quantify(sysPtr, G, H, q, v, n, beadPtr->high);
 	    r = BDD_MakeBead(sysPtr, beadPtr->level, l, h);
 	    BDD_UnrefBead(sysPtr,h);
 	    BDD_UnrefBead(sysPtr,l);
@@ -1570,13 +1592,10 @@ Quantify(
 	     * The current variable in the expression is quantified.
 	     * Quantify the two subexpressions with respect to the
 	     * remaining variables and then apply the combining operation.
-	     *
-	     * Would it be advantageous to cache more aggressively here,
-	     * rather than creating/destroying the hash table in BDD_Apply?
 	     */
-	    l = Quantify(H, sysPtr, q, v+1, n-1, beadPtr->low);
-	    h = Quantify(H, sysPtr, q, v+1, n-1, beadPtr->high);
-	    r = BDD_Apply(sysPtr, q, l, h);
+	    l = Quantify(sysPtr, G, H, q, v+1, n-1, beadPtr->low);
+	    h = Quantify(sysPtr, G, H, q, v+1, n-1, beadPtr->high);
+	    r = Apply(sysPtr, G, q, l, h);
 	    BDD_UnrefBead(sysPtr,h);
 	    BDD_UnrefBead(sysPtr,l);
 	    break;
@@ -1609,22 +1628,132 @@ BDD_Quantify(
     BDD_VariableIndex n,	/* Number of variables to quantify */
     BDD_BeadIndex e)		/* Expression to quantify */
 {
-    Tcl_HashTable H;		/* Hash table to cache partial results */
+    Tcl_HashTable G;	        /* Hash table to cache partial results
+				 * of Apply */
+    Tcl_HashTable H;		/* Hash table to cache partial results
+				 * of Quantify */
     Tcl_HashSearch search;	/* Search state for clearing the hash */
     Tcl_HashEntry* entryPtr;	/* Hash table entry to be cleared */
-    BDD_BeadIndex c;		/* Cached result */
+
+    BDD_BeadIndex r;		/* Return value */
+
+    Tcl_InitCustomHashTable(&G, TCL_CUSTOM_TYPE_KEYS, &Bead2KeyType);
     Tcl_InitHashTable(&H, TCL_ONE_WORD_KEYS);
-    BDD_BeadIndex r = Quantify(&H, sysPtr, q, v, n, e);
+
+    r = Quantify(sysPtr, &G, &H, q, v, n, e);
+
     for (entryPtr = Tcl_FirstHashEntry(&H, &search);
 	 entryPtr != NULL;
 	 entryPtr = Tcl_NextHashEntry(&search)) {
-	c = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
-	BDD_UnrefBead(sysPtr, c);
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
     }
     Tcl_DeleteHashTable(&H);
+    for (entryPtr = Tcl_FirstHashEntry(&G, &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&G);
+
     return r;
-	 
-    
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDD_Compose --
+ *
+ *	Computes a BDD representing an input BDD with a selection of variables
+ *	replaced simultaneously with other expressions.
+ *
+ * Results:
+ *	Returns the composed BDD.
+ *
+ * This procedure performs simultaneous composition. The result is
+ * different from consecutive composition calls on the individual variables:
+ *
+ * compose(x1&x2&x3, (x1->x2,x2->x3,x3->x1)) == (x2&x3&x1)
+ * compose(x1&x2&x3, x1->x2) == x2&x2&x3 == x2&x3
+ * compose(x2&x3, x2->x3) == x3&x3 == x3
+ * compose(x3, x3->x1) == x1
+ *
+ * If all the variables need to be replaced with constants, then Restrict
+ * is much faster than Compose at generating the replaced BDD.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static BDD_BeadIndex
+Compose(
+    BDD_System* sysPtr,		/* System of BDD's */
+    Tcl_HashTable* G,		/* Hash table to cache partial results 
+				 * of Apply3 */
+    Tcl_HashTable* H,		/* Hash table to cache partial results
+				 * of Compose */
+    BDD_BeadIndex u,		/* Input BDD */
+    BDD_VariableIndex n,	/* Number of variables in the vector */
+    BDD_BeadIndex r[n])		/* Replacement terms for variables
+				 * 0..n */
+{
+    BDD_BeadIndex result;	/* Return value */
+    int newFlag;
+    Tcl_HashEntry* entryPtr = Tcl_CreateHashEntry(H, (ClientData)u, &newFlag);
+    Bead* uPtr = sysPtr->beads + u;
+    BDD_VariableIndex level = uPtr->level;
+    BDD_BeadIndex low = uPtr->low;
+    BDD_BeadIndex high = uPtr->high;
+    if (!newFlag) {
+	result = (BDD_BeadIndex) (size_t) Tcl_GetHashValue(entryPtr);
+	++sysPtr->beads[result].refCount;
+	return result;
+    } else if (sysPtr->beads[u].level >= n) {
+	result = u;
+	++sysPtr->beads[result].refCount;
+    } else {
+	low = Compose(sysPtr, G, H, low, n, r);
+	high = Compose(sysPtr, G, H, high, n, r);
+	result = Apply3(sysPtr, G, BDD_TERNOP_IFTHENELSE, r[level], low, high);
+	BDD_UnrefBead(sysPtr, low);
+	BDD_UnrefBead(sysPtr, high);
+    }
+    Tcl_SetHashValue(entryPtr, (ClientData) result);
+    ++sysPtr->beads[result].refCount;
+    return result;
+}
+BDD_BeadIndex
+BDD_Compose(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u,		/* BDD to compose */
+    BDD_VariableIndex n,	/* Number of leading variables specified */
+    BDD_BeadIndex replacements[])
+				/* Replacement values for first n variables */
+{
+    Tcl_HashTable G;		/* Partial results for Apply3 */
+    Tcl_HashTable H;		/* Partial results for Compose */
+
+    Tcl_HashSearch search;	/* Search state for clearing the hash */
+    Tcl_HashEntry* entryPtr;	/* Hash table entry to be cleared */
+    BDD_BeadIndex r;	/* Return value */
+
+    Tcl_InitCustomHashTable(&G, TCL_CUSTOM_TYPE_KEYS, &Bead3KeyType);
+    Tcl_InitHashTable(&H, TCL_ONE_WORD_KEYS);
+
+    r = Compose(sysPtr, &G, &H, u, n, replacements);
+
+    for (entryPtr = Tcl_FirstHashEntry(&H, &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&H);
+    for (entryPtr = Tcl_FirstHashEntry(&G, &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&G);
+
+    return r;
 }
 
 /*

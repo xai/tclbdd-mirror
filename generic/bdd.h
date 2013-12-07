@@ -107,12 +107,15 @@ typedef unsigned int BDD_VariableIndex;
 				 * an 'unsigned int' worth. */
 
 /*
- * Value assignment: used in making conjunctions and restrictions,
+ * Value assignment: used in making conjunctions, compositions and restrictions,
  * and in reporting out satisfying expressions.
  */
 typedef struct BDD_ValueAssignment {
     BDD_VariableIndex var;	/* Variable */
-    int value;			/* Boolean value */
+    BDD_BeadIndex value;	/* Boolean value. Must be constant for
+				 * conjunctions and restrictions.
+				 * Will be constant for satisfying assignments.
+				 * May be an arbitrary bead for compositions. */
 } BDD_ValueAssignment;
 
 #define BDDAPI /* TODO: work out the export gubbins */
@@ -149,6 +152,10 @@ extern BDDAPI BDD_BeadIndex BDD_Quantify(BDD_System* sysPtr,
 					 const BDD_VariableIndex v[],
 					 BDD_VariableIndex n,
 					 BDD_BeadIndex u);
+extern BDDAPI BDD_BeadIndex BDD_Compose(BDD_System* sysPtr,
+					BDD_BeadIndex u,
+					BDD_VariableIndex nVars,
+					BDD_BeadIndex replacements[]);
 extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
 extern BDDAPI BDD_AllSatState* BDD_AllSatStart(BDD_System* sysPtr,
