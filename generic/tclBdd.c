@@ -105,6 +105,8 @@ static int BddSystemBeadindexMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemBinopMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
+static int BddSystemComposeMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				  int, Tcl_Obj* const[]);
 static int BddSystemCopyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			       int, Tcl_Obj* const[]);
 static int BddSystemDumpMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -174,6 +176,13 @@ const static Tcl_MethodType BddSystemBinopMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };				   /* common to all ten binary operators */
+const static Tcl_MethodType BddSystemComposeMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "compose",			   /* name */
+    BddSystemComposeMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemCopyMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "copy",			   /* name */
@@ -272,6 +281,7 @@ MethodTableRow systemMethodTable[] = {
                                            (ClientData) BDD_TERNOP_IFTHENELSE },
     { "beadindex", &BddSystemBeadindexMethodType, NULL },
     { "borrow",    &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_BORROW },
+    { "compose",   &BddSystemComposeMethodType,   NULL },
     { "concur3",   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_CONCUR },
     { "differ3",   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_DIFFER },
     { "dump",      &BddSystemDumpMethodType,      NULL },
@@ -583,6 +593,138 @@ BddSystemBinopMethod(
     SetNamedExpression(sdata, objv[skipped], beadIndexResult);
     BDD_UnrefBead(sdata->system, beadIndexResult);
     return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemComposeMethod --
+ *
+ *	Rewrites a BDD, substituting each of a group of variables with
+ *	some other expression
+ *
+ * Usage:
+ *	$system compose expr ?var value?...
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	expr - Name of the expression to rewrite
+ *	var - Name of a variable to substitute
+ *	value - Name of the expression that is to substitute for the variable.
+ *
+ * Results:
+ *	Returns a standard Tcl result
+ *
+ * Side effects:
+ *	Creates the named expression if successful.
+ *
+ * The substitutions proceed in parallel from the highest numbered variable
+ * to the lowest.
+ *
+ *-----------------------------------------------------------------------------
+ */
+static int
+BddSystemComposeMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+
+    BDD_BeadIndex u;		/* Expression to quantify */
+    BDD_VariableIndex nVars = 0;
+				/* Index of the highest numbered variable
+				 * to substitute */
+    BDD_BeadIndex* replace = NULL;
+				/* BDD's of the replacement values */
+    BDD_BeadIndex literalIndex;	/* Index of the current variable as a BDD */
+    BDD_ValueAssignment a;	/* Current variable's number */
+    BDD_BeadIndex replacementIndex;
+				/* Replacement value */
+    Tcl_Obj* errorMessage;	/* Error message of a failed execution */
+    BDD_BeadIndex result;	/* Result of the quantification */
+    int status = TCL_OK;	/* Status return */
+    int i;
+    BDD_VariableIndex j;
+
+    /* Check syntax */
+
+    if (objc < skipped+2 || ((objc-skipped) % 2) != 0) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name expr ?var value?...");
+	return TCL_ERROR;
+    }
+
+    /*
+     * Expression to rewrite
+     */
+    status = FindNamedExpression(interp, sdata, objv[skipped+1], &u);
+
+    for (i = skipped+2; status == TCL_OK && i < objc; i += 2) {
+	/* 
+	 * Variable to substitute
+	 */
+	if (FindNamedExpression(interp, sdata, objv[i],
+				&literalIndex) != TCL_OK) {
+	    status = TCL_ERROR;
+	} else if (!BDD_Literal(sdata->system, literalIndex, &a)
+	    || (a.value == 0)) {
+	    errorMessage = Tcl_ObjPrintf("%s is not a variable",
+					 Tcl_GetString(objv[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NotVariable",
+			     Tcl_GetString(objv[i]), NULL);
+	    status = TCL_ERROR;
+
+	    /*
+	     * Replacement value
+	     */
+	} else if (FindNamedExpression(interp, sdata, objv[i+1],
+				       &replacementIndex) != TCL_OK) {
+	    
+	    status = TCL_ERROR;
+	} else {
+	    BDD_IncrBeadRefCount(sdata->system, replacementIndex);
+	    if (a.var >= nVars) {
+		replace = ckrealloc(replace, (a.var+1) * sizeof(BDD_BeadIndex));
+		for (j = nVars; j < a.var; ++j) {
+		    replace[j] = BDD_NthVariable(sdata->system, j);
+		}
+		nVars = a.var + 1;
+	    } else {
+		BDD_UnrefBead(sdata->system, replace[a.var]);
+	    }
+	    replace[a.var] = replacementIndex;
+	}
+    }
+
+    /*
+     * Perform the composition
+     */
+    if (status == TCL_OK) {
+	result = BDD_Compose(sdata->system, u, nVars, replace);
+	SetNamedExpression(sdata, objv[skipped], result);
+	BDD_UnrefBead(sdata->system, result);
+    }
+
+    /* 
+     * Clean up references
+     */
+    for (j = 0; j < nVars; ++j) {
+	BDD_UnrefBead(sdata->system, replace[j]);
+    }
+    if (replace != NULL) {
+	ckfree(replace);
+    }
+
+    return status;
 }
 
 /*
@@ -1157,7 +1299,7 @@ BddSystemQuantifyMethod(
 			       &varc, &varv) != TCL_OK) {
 	return TCL_ERROR;
     }
-    v = ckalloc(varc);
+    v = ckalloc(varc * sizeof(BDD_VariableIndex));
     for (i = 0; i < varc; ++i) {
 	if (FindNamedExpression(interp, sdata, varv[i],
 				&literalIndex) != TCL_OK) {

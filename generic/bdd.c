@@ -1277,14 +1277,6 @@ Apply3(
     if (!newFlag) {
 	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
 	++sysPtr->beads[result].refCount;
-    } else if (op == BDD_TERNOP_IFTHENELSE && u2 == u3) {
-	/*
-	 * Special case - if the op is IFTHENELSE, and both the IF and
-	 * ELSE cases are the same bead, we can prune the search.
-	 * (This case is here because it helps performance in Compose)
-	 */
-	result = u2;
-	++sysPtr->beads[result].refCount;
     } else {
 	/* 
 	 * Check if the result is constant or equal to one of the operands
@@ -1335,6 +1327,14 @@ Apply3(
 	     * Result is the third operand
 	     */
 	    result = u3;
+	    ++sysPtr->beads[result].refCount;
+	} else if (op == BDD_TERNOP_IFTHENELSE && u2 == u3) {
+	    /*
+	     * Special case - if the op is IFTHENELSE, and both the IF and
+	     * ELSE cases are the same bead, we can prune the search.
+	     * (This case is here because it helps performance in Compose)
+	     */
+	    result = u2;
 	    ++sysPtr->beads[result].refCount;
 	} else {
 	    /*
@@ -1712,7 +1712,7 @@ Compose(
     } else {
 	low = Compose(sysPtr, G, H, low, n, r);
 	high = Compose(sysPtr, G, H, high, n, r);
-	result = Apply3(sysPtr, G, BDD_TERNOP_IFTHENELSE, r[level], low, high);
+	result = Apply3(sysPtr, G, BDD_TERNOP_IFTHENELSE, r[level], high, low);
 	BDD_UnrefBead(sysPtr, low);
 	BDD_UnrefBead(sysPtr, high);
     }
@@ -1745,12 +1745,12 @@ BDD_Compose(
 	 entryPtr = Tcl_NextHashEntry(&search)) {
 	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
     }
-    Tcl_DeleteHashTable(&H);
     for (entryPtr = Tcl_FirstHashEntry(&G, &search);
 	 entryPtr != NULL;
 	 entryPtr = Tcl_NextHashEntry(&search)) {
 	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
     }
+    Tcl_DeleteHashTable(&H);
     Tcl_DeleteHashTable(&G);
 
     return r;
@@ -1894,11 +1894,11 @@ BDD_AllSatStart(
      */
     stateVector->sysPtr = sysPtr;
     stateVector->uStack = (BDD_BeadIndex*)
-	ckalloc(nVars * sizeof(BDD_BeadIndex));
+	ckalloc((nVars + 1) * sizeof(BDD_BeadIndex));
     stateVector->sStack = (unsigned char*)
-	ckalloc(nVars);
+	ckalloc(nVars + 1);
     stateVector->v = (BDD_ValueAssignment*)
-	ckalloc(nVars * sizeof(BDD_ValueAssignment));
+	ckalloc((nVars + 1) * sizeof(BDD_ValueAssignment));
 
     /*
      * Store the initial state, in which the top of the expression

@@ -1917,6 +1917,295 @@ test bdd-16.16 {ternary - or} {*}{
     -cleanup {rename sys {}}
 }
 
+test bdd-17.1 {compose - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys compose
+    }
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-17.2 {compose - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys compose a b c
+    }
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-17.3 {compose - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys compose a garbage} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-17.4 {compose - bad var} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+    }
+    -body {
+	list [catch {sys compose x a garbage 0} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-17.5 {compose - bad var} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys & c a b
+    }
+    -body {
+	list [catch {sys compose x a c 0} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {c is not a variable} {BDD NotVariable c}}
+}
+
+test bdd-17.6 {compose - bad var} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys notnthvar !b 1
+    }
+    -body {
+	list [catch {sys compose x a !b 0} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {!b is not a variable} {BDD NotVariable !b}}
+}
+
+test bdd-17.7 {compose - bad replacement expr} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+    }
+    -body {
+	list [catch {sys compose x a b garbage} result] $result $::errorCode
+    }
+    -cleanup {rename sys {}}
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-17.8 {compose - do nothing gracefully} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys & c a b
+    }
+    -body {
+	sys compose d c
+	expr {[sys beadindex d] == [sys beadindex c]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-17.9 {compose with irrelevant variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar p 0
+	sys nthvar a 1
+	sys nthvar q 2
+	sys nthvar b 3
+	sys nthvar r 4
+	sys & c a b
+    }
+    -body {
+	sys compose d c p 0
+	expr {[sys beadindex d] == [sys beadindex c]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-17.10 {compose with irrelevant variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar p 0
+	sys nthvar a 1
+	sys nthvar q 2
+	sys nthvar b 3
+	sys nthvar r 4
+	sys & c a b
+    }
+    -body {
+	sys compose d c q 0
+	expr {[sys beadindex d] == [sys beadindex c]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-17.10 {compose with irrelevant variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar p 0
+	sys nthvar a 1
+	sys nthvar q 2
+	sys nthvar b 3
+	sys nthvar r 4
+	sys & c a b
+    }
+    -body {
+	sys compose d c r 0
+	expr {[sys beadindex d] == [sys beadindex c]}
+    }
+    -cleanup {rename sys {}}
+    -result 1
+}
+
+test bdd-17.11 {compose - replace with constant} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys & c a b
+    } -body {
+	set trouble {}
+	foreach s {{a 0} {a 1} {b 0} {b 1} {a 1 b 1}} \
+	    y {0 b 0 a 1} \
+	    {
+		sys compose z c {*}$s
+		if {[sys beadindex z] != [sys beadindex $y]} {
+		    lappend trouble "a&b\[[lindex $s 1]/[lindex $s 0]] " \
+			"should be $y"
+		}
+	    }
+	join $trouble \n
+    }
+    -cleanup {rename sys {}}
+    -result {}
+}
+
+test bdd-17.12 {compose - replace with variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar p 0; sys notnthvar !p 0
+	sys nthvar a 1; sys notnthvar !a 1
+	sys nthvar q 2; sys notnthvar !q 2
+	sys nthvar b 3; sys notnthvar !b 3
+	sys nthvar r 4; sys notnthvar !r 4
+	sys & c a b
+    }
+    -body {
+	set trouble {} 
+	foreach x {p a q b r} {
+	    sys compose d c a $x
+	    sys & e $x b
+	    if {[sys beadindex d] != [sys beadindex d]} {
+		lappend trouble "a&$x should be the same as (a&b)\[$x/b]"
+	    }
+	}
+	join $trouble \n
+    }
+    -cleanup {rename sys {}}
+    -result {}
+}
+
+test bdd-17.13 {compose - interchange variables} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 1; sys notnthvar !a 1
+	sys nthvar b 2; sys notnthvar !b 2
+	sys < c a b
+	sys < y b a
+    } 
+    -body {
+	sys compose z c a b b a
+	expr {[sys beadindex z] == [sys beadindex y]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-17.14 {compose - interchange variables} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 1; sys notnthvar !a 1
+	sys nthvar b 2; sys notnthvar !b 2
+	sys nthvar c 3; sys notnthvar !c 3
+	sys < x a b
+	sys < t b c
+	sys & x x t
+	sys < y b c
+	sys < t c a
+	sys & y y t
+    } 
+    -body {
+	sys compose z x a b b c c a
+	expr {[sys beadindex z] == [sys beadindex y]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-17.15 {compose - interchange variables} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 1; sys notnthvar !a 1
+	sys nthvar b 2; sys notnthvar !b 2
+	sys nthvar c 3; sys notnthvar !c 3
+	sys < x a b
+	sys < t b c
+	sys & x x t
+	sys < y c a
+	sys < t a b
+	sys & y y t
+    } 
+    -body {
+	sys compose z x b a c b a c
+	expr {[sys beadindex z] == [sys beadindex y]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
+test bdd-17.15 {compose - more complex substitution} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+	sys nthvar d 3
+	sys | x a b
+	sys & t a b
+	sys & u c d
+	sys | y t u
+    } 
+    -body {
+	sys compose z x a t b u
+	expr {[sys beadindex z] == [sys beadindex y]}
+    }
+    -result 1
+    -cleanup {rename sys {}}
+}
+
 test bdd-21.1 {eight queens} {*}{
     -setup {
 	bdd::system create sys
