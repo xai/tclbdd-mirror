@@ -1744,40 +1744,41 @@ BDD_Quantify(
  *-----------------------------------------------------------------------------
  */
 
-#if 0 /* This needs work - and it's a performance hack that
-       * might not be needed? */
 static BDD_BeadIndex
 ApplyAndQuantify(
     BDD_System* sysPtr,	 	/* System of BDD's */
-    Tcl_HashTable* F,		/* Partial results of Quantify */
-    Tcl_HashTable* G,	 	/* Partial results of Quantify */
-    Tcl_HashTable* H,	 	/* Partial results of Apply */
-    Tcl_HashTable* J,		/* Final partial results of ApplyAndQuantify */
-    BDD_Quantifier q,	 	/* Quantifier to apply */
     BDD_VariableIndex n,	/* Number of variables to quantify */
     const BDD_VariableIndex* v,	/* Variables to quantify */
-    BDD_BinOp op,		/* Operation to apply */
     BDD_BeadIndex u1,		/* Left operand */
     BDD_BeadIndex u2)		/* Right operand */
 {
+    BDD_BinOp op = sysPtr->appquantOp;
+				/* Operation to apply */
     BDD_BeadIndex u[2];	        /* Hash key */
     Tcl_HashEntry* entry;       /* Cached partial result */
     int newFlag;	        /* Flag whether cached result was found */
-    BDD_BinOp opmask;		/* Mask for matching the operator */
     BDD_BeadIndex temp;
     BDD_BeadIndex result = ~(BDD_BeadIndex) 0;
-    Bead* beadPtr1, * beadPtr2;	/* Left and right operands */
-    BDD_VariableIndex level1, level2;
-				/* Left and right variables */
-    BDD_VariableIndex level;	/* Lowest variable of the two operands */
+    
+    Bead* beadPtr1 = sysPtr->beads + u1;
+				/* Left operand */
+    Bead* beadPtr2 = sysPtr->beads + u2;
+				/* Right operand */
+    BDD_VariableIndex level1 = beadPtr1->level;
+				/* Left variable */
+    BDD_VariableIndex level2 = beadPtr2->level;
+				/* Right variable */
+    BDD_VariableIndex level = (level1 < level2) ? level1 : level2;	
+				/* Lowest variable of the two operands */
     BDD_BeadIndex l, h;		/* Left and right operands for recursive
 				 * ApplyAndQuantify */
+    BDD_BeadIndex low1, low2, high1, high2;
 
     /* Check if the result is already hashed */
 
     u[0] = u1;
     u[1] = u2;
-    entry = Tcl_CreateHashEntry(J, u, &newFlag);
+    entry = Tcl_CreateHashEntry(&(sysPtr->appquantCache), u, &newFlag);
     if (!newFlag) {
 	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
 	++sysPtr->beads[result].refCount;
@@ -1786,120 +1787,90 @@ ApplyAndQuantify(
 
     /* 
      * Check if the result of the operation is constant or a copy
-     * of one of the operands
+     * of one of the operands. If it is, we're done with application
+     * and can switch to a simple Quantify.
      */
-    opmask = 0xF;
-    if (u1 == 0) {
-	opmask &= 0x3;
-    } else if (u1 == 1) {
-	opmask &= 0xC;
-    }
-    if (u2 == 0) {
-	opmask &= 0x5;
-    } else if (u2 == 1) {
-	opmask &= 0xA;
-    }
-    if ((op & opmask) == 0) {
-	/* 
-	 * Result is constant zero 
-	 */
-	result = 0;
-	++sysPtr->beads[result].refCount;
-    } else if ((op & opmask) == opmask) {
-	/* 
-	 * Result is constant one 
-	 */
-	result = 1;
-	++sysPtr->beads[result].refCount;
-    } else if ((op & opmask) == (0xC & opmask)) {
-	/*
-	 * Result is the left operand
-	 */
-	result = u1;
-	++sysPtr->beads[result].refCount;
-    } else if ((op & opmask) == (0xA & opmask)) {
-	/*
-	 * Result is the right operand
-	 */
-	result = u2;
-	++sysPtr->beads[result].refCount;
-	
-	/*
-	 * Also check for special cases where both operands are
-	 * identical.
-	 */
-    } else if ((op == BDD_BINOP_AND || op == BDD_BINOP_OR) && (u1 == u2)) {
-	result = u2;
-	++sysPtr->beads[result].refCount;
-    } else if ((op == BDD_BINOP_XOR
-		|| op == BDD_BINOP_LT
-		|| op == BDD_BINOP_GT) && (u1 == u2)) {
-	result = 0;
-	++sysPtr->beads[result].refCount;
-    } else if ((op == BDD_BINOP_EQ
-		|| op == BDD_BINOP_LE
-		|| op == BDD_BINOP_GE) && (u1 == u2)) {
-	result = 1;
-	++sysPtr->beads[result].refCount;
-    }
-
-    /*
-     * If we've eliminated either operand, finish by doing the quantification
-     * on the other operand. If we've reduced the expression to a constant,
-     * just cache and return the result.
-     */
-
-    if (result != ~(BDD_BeadIndex) 0) {
-	if (result > 1) {
-	    temp = result;
-	    result = Quantify(sysPtr, F, G, q, n, v, temp);
-	    BDD_UnrefBead(sysPtr,temp);
+    if (ApplyEasyCases(op, u1, u2, &temp)) {
+	++sysPtr->beads[temp].refCount;
+	if (temp <= 1) {
+	    result = temp;
+	} else {
+	    result = Quantify(sysPtr, n, v, temp);
+	    --sysPtr->beads[temp].refCount;
 	}
     } else {
 
-	beadPtr1 = sysPtr->beads + u1;
-	beadPtr2 = sysPtr->beads + u2;
-	level1 = beadPtr1->level;
-	level2 = beadPtr2->level;
-	if (n == 0 || (level1 > v[n-1] && level2 > v[n-1])) {
-	    /*
-	     * We've run out of variables to quantify
-	     */
-	    result = Apply(sysPtr, u1, u2);
-	} else if (level1 < level2) {
-	    level = level1;
-	    l = ApplyAndQuantify(sysPtr, F, G, J, q, n, v, op,
-				 beadPtr1->low, u2);
-	    h = ApplyAndQuantify(sysPtr, F, G, J, q, n, v, op,
-				 beadPtr1->high, u2);
-	} else if (level1 == level2) {
-	    level = level1;
-	    l = ApplyAndQuantify(sysPtr, F, G, H, J, q, n, v, op,
-				 beadPtr1->low, beadPtr2->high);
-	    h = ApplyAndQuantify(sysPtr, F, G, H, J, q, n, v, op,
-				 beadPtr1->high, beadPtr2->high);
-	} else /* level1 > level2 */ {
-	    level = level2;
-	    l = ApplyAndQuantify(sysPtr, F, G, H, J, q, n, v, op,
-				 u1, beadPtr2->high);
-	    h = ApplyAndQuantify(sysPtr, F, G, H, J, q, n, v, op,
-				 u1, beadPtr2->high);
-	}
-	if (level < v[0]) {
-	    
-	    /* FIXME FINISH THIS */
-	}
+	for (;;) {
 
+	    if (n == 0 || (level1 > v[n-1] && level2 > v[n-1])) {
+		/*
+		 * We've run out of variables to quantify. Switch to a simple 
+		 * Apply operation.
+		 * FIXME This is wrong for UNIQUE quantification
+		 */
+		sysPtr->applyOp = sysPtr->appquantOp;
+		result = Apply(sysPtr, u1, u2);
+		break;
+	    } 
+
+	    if (level1 == level) {
+		low1 = beadPtr1->low;
+		high1 = beadPtr1->high;
+	    } else {
+		low1 = u1;
+		high1 = u1;
+	    }
+	    if (level2 == level) {
+		low2 = beadPtr2->low;
+		high2 = beadPtr2->high;
+	    } else {
+		low2 = u2;
+		high2 = u2;
+	    }
+
+	    if (level < *v) {
+		/*
+		 * The current variable in the expression is unquantified.
+		 */
+		l = ApplyAndQuantify(sysPtr, n, v, low1, low2);
+		h = ApplyAndQuantify(sysPtr, n, v, high1, high2);
+		result = BDD_MakeBead(sysPtr, level, l, h);
+		BDD_UnrefBead(sysPtr, l);
+		BDD_UnrefBead(sysPtr, h);
+		
+	    } else if (level == *v) {
+		/*
+		 * The current variable in the expression is quantified.
+		 */
+		l = ApplyAndQuantify(sysPtr, n-1, v+1, low1, low2);
+		h = ApplyAndQuantify(sysPtr, n-1, v+1, high1, high2);
+		sysPtr->applyOp = sysPtr->quantifier;
+		result = Apply(sysPtr, l, h);
+		BDD_UnrefBead(sysPtr, l);
+		BDD_UnrefBead(sysPtr, h);
+		
+	    } else {
+		/*
+		 * The current variable in the quantifier is unused.
+		 * Advance to the next one
+		 * FIXME This is wrong for a UNIQUE quantifier
+		 */
+		++v;
+		--n;
+	    }
+	}
     }
-
-    /* Cache the result */
+    /*
+     * Cache and return the result
+     * It is possible for an outer quantification to destroy the
+     * result altogether, so make sure that the refcount tracks the
+     * cache entry.
+     */
     Tcl_SetHashValue(entry, (ClientData) result);
     ++sysPtr->beads[result].refCount;
 
     return result;
 }
-#endif
-		 
 
 /*
  *-----------------------------------------------------------------------------
@@ -1918,7 +1889,7 @@ ApplyAndQuantify(
  * compose(x1&x2&x3, (x1->x2,x2->x3,x3->x1)) == (x2&x3&x1)
  * compose(x1&x2&x3, x1->x2) == x2&x2&x3 == x2&x3
  * compose(x2&x3, x2->x3) == x3&x3 == x3
- * compose(x3, x3->x1) == x1
+x * compose(x3, x3->x1) == x1
  *
  * If all the variables need to be replaced with constants, then Restrict
  * is much faster than Compose at generating the replaced BDD.

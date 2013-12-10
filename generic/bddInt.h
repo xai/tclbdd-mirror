@@ -41,6 +41,10 @@ struct BDD_System {
 
     Tcl_HashTable applyCache;	/* Cache of partial results for BDD_Apply */
     BDD_BinOp applyOp;		/* Operator for BDD_Apply */
+    Tcl_HashTable appquantCache;
+				/* Cache of partial results for
+				 * BDD_ApplyAndQuantify */
+    BDD_BinOp appquantOp;	/* Operator for BDD_ApplyAndQuantify */
     Tcl_HashTable apply3Cache;	/* Cache of partial results for BDD_Apply3 */
     BDD_TernOp apply3Op;	/* Operator for BDD_Apply3 */
     Tcl_HashTable composeCache;	/* Cache of partial results for BDD_Compose */
