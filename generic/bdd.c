@@ -1717,7 +1717,6 @@ BDD_Quantify(
 	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
     }
     Tcl_DeleteHashTable(&(sysPtr->applyCache));
-
     return r;
 }
 
@@ -1800,9 +1799,11 @@ ApplyAndQuantify(
 	}
     } else {
 
+	/*
+	 * Not an easy case. Iterate over the quantified variables
+	 */
 	for (;;) {
-
-	    if (n == 0 || (level1 > v[n-1] && level2 > v[n-1])) {
+	    if (n == 0) {
 		/*
 		 * We've run out of variables to quantify. Switch to a simple 
 		 * Apply operation.
@@ -1813,6 +1814,9 @@ ApplyAndQuantify(
 		break;
 	    } 
 
+	    /*
+	     * Split both expressions at the current variable
+	     */
 	    if (level1 == level) {
 		low1 = beadPtr1->low;
 		high1 = beadPtr1->high;
@@ -1831,6 +1835,8 @@ ApplyAndQuantify(
 	    if (level < *v) {
 		/*
 		 * The current variable in the expression is unquantified.
+		 * Recurse into the subexpressions, and recombine with
+		 * a simple IF-THEN_ELSE
 		 */
 		l = ApplyAndQuantify(sysPtr, n, v, low1, low2);
 		h = ApplyAndQuantify(sysPtr, n, v, high1, high2);
@@ -1841,6 +1847,8 @@ ApplyAndQuantify(
 	    } else if (level == *v) {
 		/*
 		 * The current variable in the expression is quantified.
+		 * Recurse into the subexpressions at the next variable,
+		 * and combine by applying the quantifier.
 		 */
 		l = ApplyAndQuantify(sysPtr, n-1, v+1, low1, low2);
 		h = ApplyAndQuantify(sysPtr, n-1, v+1, high1, high2);
@@ -1852,7 +1860,7 @@ ApplyAndQuantify(
 	    } else {
 		/*
 		 * The current variable in the quantifier is unused.
-		 * Advance to the next one
+		 * Advance to the next one.
 		 * FIXME This is wrong for a UNIQUE quantifier
 		 */
 		++v;
@@ -1860,15 +1868,57 @@ ApplyAndQuantify(
 	    }
 	}
     }
+
     /*
      * Cache and return the result
-     * It is possible for an outer quantification to destroy the
-     * result altogether, so make sure that the refcount tracks the
-     * cache entry.
      */
     Tcl_SetHashValue(entry, (ClientData) result);
     ++sysPtr->beads[result].refCount;
 
+    return result;
+}
+BDD_BeadIndex
+BDD_ApplyAndQuantify(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_Quantifier q,		/* Quantifier (EXISTS or FORALL */
+    BDD_VariableIndex n,	/* Number of quantified variables */
+    const BDD_VariableIndex v[],
+				/* Quantified variables */
+    BDD_BinOp op,		/* Operator to apply */
+    BDD_BeadIndex u1,		/* Left subexpression */
+    BDD_BeadIndex u2)		/* Right subexpression */
+{
+    BDD_BeadIndex result;	/* Result of the combined operation */
+    Tcl_HashSearch search;	/* Search for clearing caches */
+    Tcl_HashEntry* entryPtr;	/* Hash entry in cache being cleared */
+    Tcl_InitCustomHashTable(&(sysPtr->applyCache), 
+			    TCL_CUSTOM_TYPE_KEYS, &Bead3KeyType);
+    Tcl_InitCustomHashTable(&(sysPtr->appquantCache),
+			    TCL_CUSTOM_TYPE_KEYS, &Bead2KeyType);
+    Tcl_InitHashTable(&(sysPtr->quantifyCache), TCL_ONE_WORD_KEYS);
+    sysPtr->quantifier = q;
+    sysPtr->appquantOp = op;
+
+    result = ApplyAndQuantify(sysPtr, n, v, u1, u2);
+    
+    for (entryPtr = Tcl_FirstHashEntry(&(sysPtr->quantifyCache), &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&(sysPtr->quantifyCache));
+    for (entryPtr = Tcl_FirstHashEntry(&(sysPtr->applyCache), &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&(sysPtr->applyCache));
+    for (entryPtr = Tcl_FirstHashEntry(&(sysPtr->appquantCache), &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&(sysPtr->appquantCache));
     return result;
 }
 

@@ -156,6 +156,13 @@ extern BDDAPI BDD_BeadIndex BDD_Compose(BDD_System* sysPtr,
 					BDD_BeadIndex u,
 					BDD_VariableIndex nVars,
 					BDD_BeadIndex replacements[]);
+extern BDDAPI BDD_BeadIndex BDD_ApplyAndQuantify(BDD_System* sysPtr, 
+						 BDD_Quantifier q,
+						 BDD_VariableIndex n,
+						 const BDD_VariableIndex v[],
+						 BDD_BinOp op,
+						 BDD_BeadIndex u1, 
+						 BDD_BeadIndex u2);
 extern BDDAPI int BDD_SatCount(BDD_System* sysPtr, BDD_BeadIndex x,
 			       mp_int* count);
 extern BDDAPI BDD_AllSatState* BDD_AllSatStart(BDD_System* sysPtr,
