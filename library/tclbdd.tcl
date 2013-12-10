@@ -10,7 +10,7 @@
 #------------------------------------------------------------------------------
 
 package require grammar::aycock;	# TEMP - Build parser in advance!
-# package require grammar::aycock::runtime
+package require grammar::aycock::runtime
 
 namespace eval bdd {
     namespace export system

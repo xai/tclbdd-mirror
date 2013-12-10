@@ -1327,7 +1327,7 @@ BddSystemQuantifyMethod(
     /*
      * Quantify the formula
      */
-    result = BDD_Quantify(sdata->system, q, v, varc, u);
+    result = BDD_Quantify(sdata->system, q, varc, v, u);
 
     ckfree(v);
     SetNamedExpression(sdata, objv[skipped], result);

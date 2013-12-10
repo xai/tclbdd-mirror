@@ -149,8 +149,8 @@ extern BDDAPI BDD_BeadIndex BDD_Restrict(BDD_System* sysPtr,
 					 BDD_VariableIndex n);
 extern BDDAPI BDD_BeadIndex BDD_Quantify(BDD_System* sysPtr,
 					 BDD_Quantifier q,
-					 const BDD_VariableIndex v[],
 					 BDD_VariableIndex n,
+					 const BDD_VariableIndex v[],
 					 BDD_BeadIndex u);
 extern BDDAPI BDD_BeadIndex BDD_Compose(BDD_System* sysPtr,
 					BDD_BeadIndex u,

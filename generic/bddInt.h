@@ -38,7 +38,30 @@ struct BDD_System {
 				 * hash bucket. The hash table looks up beads
 				 * by 'level', 'low' and 'high.*/
     BDD_BeadIndex hashSize;	/* Number of buckets in the hash table */
-  
+
+    Tcl_HashTable applyCache;	/* Cache of partial results for BDD_Apply */
+    BDD_BinOp applyOp;		/* Operator for BDD_Apply */
+    Tcl_HashTable apply3Cache;	/* Cache of partial results for BDD_Apply3 */
+    BDD_TernOp apply3Op;	/* Operator for BDD_Apply3 */
+    Tcl_HashTable composeCache;	/* Cache of partial results for BDD_Compose */
+    BDD_VariableIndex composeCount;
+				/* Number of variables being substituted
+				 * in BDD_Compose */
+    BDD_BeadIndex* composeReplacements;
+				/* Replacement expressions for variables
+				 * being substituted in BDD_Compose */
+    Tcl_HashTable dumpCache;	/* Cache of visited nodes for BDD_Dump */
+    Tcl_Interp* dumpInterp;	/* Tcl interpreter where BDD_Dump stores
+				 * results */
+    Tcl_Obj* dumpOutput;        /* Tcl object where BDD_Dump returns the dump */
+    Tcl_HashTable negateCache;	/* Cache of partial results for BDD_Negate */
+    BDD_Quantifier quantifier;	/* Quantifier for BDD_Quantify */
+    Tcl_HashTable quantifyCache;
+				/* Cache of partial results for BDD_Quantify */
+    Tcl_HashTable restrictCache; 
+				/* Cache of partial results for BDD_Restrict */
+    Tcl_HashTable satCountCache;
+				/* Cache of partial results for BDD_SatCount */
 };
 
 /*
