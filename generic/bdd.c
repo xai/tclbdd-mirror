@@ -1176,7 +1176,7 @@ Apply(
     BDD_BinOp op = sysPtr->applyOp;
 				/* Operation to apply */
     Bead* beads = sysPtr->beads; /* Bead table */
-    BDD_BeadIndex u[2];		/* Bead indices for left- and right-hand 
+    BDD_BeadIndex u[3];		/* Bead indices for left- and right-hand 
 				 * sides */
     Bead* u1Ptr = beads + u1;	/* Pointer to the left-hand bead */
     Bead* u2Ptr = beads + u2;	/* Pointer to the right-hand bead */
@@ -1192,10 +1192,14 @@ Apply(
     Tcl_HashEntry* entry;	/* Pointer to the entry in the
 				 * cache of beads for this operation */
 
-    /* Check if the result is already hashed */
+    /* 
+     * Check if the result is already hashed. Note that the operator
+     * is included in the cache because relational joins have the cache
+     * active for AND and for OR (EXISTS) simultaneously */
 
-    u[0] = u1;
-    u[1] = u2;
+    u[0] = op;
+    u[1] = u1;
+    u[2] = u2;
     entry = Tcl_CreateHashEntry(&(sysPtr->applyCache), u, &newFlag);
     if (!newFlag) {
 	result = (BDD_BeadIndex) Tcl_GetHashValue(entry);
@@ -1268,7 +1272,7 @@ BDD_Apply(
     Tcl_HashSearch search;	/* Search for clearing the cache */
     Tcl_HashEntry* entryPtr;	/* Hash entyr for clearing the cache */
     Tcl_InitCustomHashTable(&(sysPtr->applyCache),
-			    TCL_CUSTOM_TYPE_KEYS, &Bead2KeyType);
+			    TCL_CUSTOM_TYPE_KEYS, &Bead3KeyType);
     sysPtr->applyOp = op;
     BDD_BeadIndex result = Apply(sysPtr, u1, u2);
     for (entryPtr = Tcl_FirstHashEntry(&(sysPtr->applyCache), &search);
@@ -1695,7 +1699,7 @@ BDD_Quantify(
     BDD_BeadIndex r;		/* Return value */
 
     Tcl_InitCustomHashTable(&(sysPtr->applyCache),
-			    TCL_CUSTOM_TYPE_KEYS, &Bead2KeyType);
+			    TCL_CUSTOM_TYPE_KEYS, &Bead3KeyType);
     sysPtr->quantifier = q;
     Tcl_InitHashTable(&(sysPtr->quantifyCache), TCL_ONE_WORD_KEYS);
 
