@@ -1062,6 +1062,97 @@ BDD_Negate(
 /*
  *-----------------------------------------------------------------------------
  *
+ * ApplyEasyCases --
+ *
+ *	Tests for the easy cases in BDD_Apply, where one or the other
+ *	operand is constant, or both operands are identical.
+ *
+ * Result:
+ *	Returns 1 if an easy case was found, 0 otherwise.
+ *
+ * Side effects:
+ *	Sets 'result' to the result of the easy case. The caller is
+ *	responsible for incrementing the reference count.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+inline static int
+ApplyEasyCases(
+    BDD_BinOp op,		/* Operator to apply */
+    BDD_BeadIndex u1,		/* Left operand */
+    BDD_BeadIndex u2,		/* Right operand */
+    BDD_BeadIndex* result)	/* OUTPUT: Result */
+{
+    BDD_BinOp opmask;		/* Mask of relevant bits for this operation */
+
+    /* 
+     * Check if the result is constant or a copy of one of the operands
+     */
+    opmask = 0xF;
+    if (u1 == 0) {
+	opmask &= 0x3;
+    } else if (u1 == 1) {
+	opmask &= 0xC;
+    }
+    if (u2 == 0) {
+	opmask &= 0x5;
+    } else if (u2 == 1) {
+	opmask &= 0xA;
+    }
+    if ((op & opmask) == 0) {
+	/* 
+	 * Result is constant zero 
+	 */
+	*result = 0;
+	return 1;
+    }
+    if ((op & opmask) == opmask) {
+	/* 
+	 * Result is constant one 
+	 */
+	*result = 1;
+	return 1;
+    } 
+    if ((op & opmask) == (0xC & opmask)) {
+	/*
+	 * Result is the left operand
+	 */
+	*result = u1;
+	return 1;
+    } 
+    if ((op & opmask) == (0xA & opmask)) {
+	/*
+	 * Result is the right operand
+	 */
+	*result = u2;
+	return 1;
+    }
+
+    /*
+     * Special cases for 'x OP x':
+     */
+    
+    if ((op == BDD_BINOP_AND || op == BDD_BINOP_OR) && (u1 == u2)) {
+	*result = u2;
+	return 1;
+    }
+    if ((op == BDD_BINOP_XOR || op == BDD_BINOP_LT || op == BDD_BINOP_GT)
+	&& (u1 == u2)) {
+	*result = 0;
+	return 1;
+    } 
+    if ((op == BDD_BINOP_EQ || op == BDD_BINOP_LE || op == BDD_BINOP_GE)
+	&& (u1 == u2)) {
+	*result = 1;
+	return 1;
+    }
+    return 0;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_Apply --
  *
  *	Applies a Boolean operator between two BDD's.
@@ -1100,7 +1191,6 @@ Apply(
     BDD_BeadIndex result;	/* Return value */
     Tcl_HashEntry* entry;	/* Pointer to the entry in the
 				 * cache of beads for this operation */
-    BDD_BinOp opmask;		/* Mask of relevant bits for this operation */
 
     /* Check if the result is already hashed */
 
@@ -1112,67 +1202,16 @@ Apply(
 	++sysPtr->beads[result].refCount;
     } else {
 
-	/* 
-	 * Check if the result is constant or a copy of one of the operands
+	/*
+	 * Test for 'result is constant', 'result is copy of operand'
 	 */
-	opmask = 0xF;
-	if (u1 == 0) {
-	    opmask &= 0x3;
-	} else if (u1 == 1) {
-	    opmask &= 0xC;
-	}
-	if (u2 == 0) {
-	    opmask &= 0x5;
-	} else if (u2 == 1) {
-	    opmask &= 0xA;
-	}
-	if ((op & opmask) == 0) {
-	    /* 
-	     * Result is constant zero 
-	     */
-	    result = 0;
-	    ++sysPtr->beads[result].refCount;
-	} else if ((op & opmask) == opmask) {
-	    /* 
-	     * Result is constant one 
-	     */
-	    result = 1;
-	    ++sysPtr->beads[result].refCount;
-	} else if ((op & opmask) == (0xC & opmask)) {
-	    /*
-	     * Result is the left operand
-	     */
-	    result = u1;
-	    ++sysPtr->beads[result].refCount;
-	} else if ((op & opmask) == (0xA & opmask)) {
-	    /*
-	     * Result is the right operand
-	     */
-	    result = u2;
-	    ++sysPtr->beads[result].refCount;
-
-	    /*
-	     * Special cases for 'x OP x':
-	     */
-
-	} else if ((op == BDD_BINOP_AND || op == BDD_BINOP_OR) && (u1 == u2)) {
-	    result = u2;
-	    ++sysPtr->beads[result].refCount;
-	} else if ((op == BDD_BINOP_XOR 
-		    || op == BDD_BINOP_LT
-		    || op == BDD_BINOP_GT) && (u1 == u2)) {
-	    result = 0;
-	    ++sysPtr->beads[result].refCount;
-	} else if ((op == BDD_BINOP_EQ
-		    || op == BDD_BINOP_LE
-		    || op == BDD_BINOP_GE) && (u1 == u2)) {
-	    result = 1;
+	if (ApplyEasyCases(op, u1, u2, &result)) {
 	    ++sysPtr->beads[result].refCount;
 	} else {
-	    
 	    /*
-	     * Result is not constant. Apply recursively to the subexpression
-	     * with the earlier top variable.
+	     * Result is neither constant nor a simple copy.  Apply
+	     * the operator recursively to the subexpression with the
+	     * earlier top variable.
 	     */
 	    if (u1Ptr->level == u2Ptr->level) {
 		/*
