@@ -172,6 +172,8 @@ extern BDDAPI int BDD_AllSatNext(BDD_AllSatState* state,
 				 BDD_ValueAssignment** vPtr,
 				 BDD_VariableIndex* nPtr);
 extern BDDAPI void BDD_AllSatFinish(BDD_AllSatState*);
+extern BDDAPI void BDD_Profile(BDD_System* sysPtr, BDD_BeadIndex u,
+			       BDD_VariableIndex n, BDD_BeadIndex counts[]);
 extern BDDAPI int BDD_Dump(Tcl_Interp*, Tcl_Obj*, BDD_System*, BDD_BeadIndex);
 extern BDDAPI void BDD_DeleteSystem(BDD_System* sysPtr);
 

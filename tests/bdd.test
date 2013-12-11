@@ -2553,6 +2553,138 @@ foreach q {exists forall} {
     }
 }
 
+test bdd-19.1 {profile - wrong # args} {*}{
+    -setup {bdd::system create sys}
+    -body {sys profile}
+    -cleanup {rename sys {}}
+    -returnCodes error
+    -match glob
+    -result {wrong # args: *}
+}
+
+test bdd-19.2 {profile - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys profile garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-19.3 {profile constants} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [sys profile 0] [sys profile 1]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{} {}}
+}
+
+test bdd-19.4 {profile single variables} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {
+	list [sys profile 0] [sys profile 1] [sys profile a] [sys profile !a] \
+	    [sys unset a !a] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {0 0 1 1 {} 2}
+}
+
+test bdd-19.4 {profile single variables} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+    }
+    -body {
+	list [sys profile 0] [sys profile 1] \
+	    [sys profile a] [sys profile !a] \
+	    [sys profile b] [sys profile !b] \
+	    [sys unset a !a b !b] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{0 0} {0 0} {1 0} {1 0} {0 1} {0 1} {} 2}
+}
+
+test bdd-19.5 {profile ==} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys nthvar c 2
+	sys nthvar d 3
+	sys nthvar e 4
+	sys nthvar f 5
+    }
+    -body {
+	sys == eq1 a b
+	sys == eq2 c d
+	sys == eq3 e f
+	sys &3 smart eq1 eq2 eq3
+	sys == eq1 a d
+	sys == eq2 b e
+	sys == eq3 c f
+	sys &3 dumb eq1 eq2 eq3
+	list [sys profile smart] [sys profile dumb] \
+	    [sys unset a b c d e f eq1 eq2 eq3 smart dumb] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{1 2 1 2 1 2} {1 2 4 8 4 2} {} 2}
+}
+
+test bdd-19.6 {profile 4-bit adder} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a1 0; sys nthvar b1 1; sys nthvar z1 2
+	sys nthvar a2 3; sys nthvar b2 4; sys nthvar z2 5
+	sys nthvar a4 6; sys nthvar b4 7; sys nthvar z4 8
+	sys nthvar a8 9; sys nthvar b8 10; sys nthvar z8 11
+    }
+    -body {
+	sys ^ sum1 a1 b1
+	sys & carry2 a1 b1
+	sys ^3 sum2 a2 b2 carry2
+	sys median carry4 a2 b2 carry2
+	sys ^3 sum4 a4 b4 carry4
+	sys median carry8 a4 b4 carry4
+	sys ^3 sum8 a8 b8 carry8
+	sys median carry16 a8 b8 carry8
+	sys == result sum1 z1
+	sys == term sum2 z2
+	sys & result result term
+	sys == term sum4 z4
+	sys & result result term
+	sys == term sum8 z8
+	sys & result result term
+	sys == term carry16 0
+	sys & result result term
+	sys unset term sum1 sum2 sum4 sum8 carry2 carry4 carry8 carry16
+	list [sys profile result] \
+	    [sys unset result a1 a2 a4 a8 b1 b2 b4 b8 z1 z2 z4 z8] \
+	    [sys gc]
+    }
+    -cleanup {rename sys {}}
+    -result {{1 2 3 2 3 4 2 3 4 2 2 2} {} 2}
+}
+
 test bdd-21.1 {eight queens} {*}{
     -setup {
 	bdd::system create sys

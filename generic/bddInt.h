@@ -59,6 +59,12 @@ struct BDD_System {
 				 * results */
     Tcl_Obj* dumpOutput;        /* Tcl object where BDD_Dump returns the dump */
     Tcl_HashTable negateCache;	/* Cache of partial results for BDD_Negate */
+    Tcl_HashTable profileCache;	/* Cache of visited beads for BDD_Profile */
+    BDD_VariableIndex profileDepth;
+				/* Max depth for BDD_Profile */
+    BDD_BeadIndex* profileCounts;
+				/* Vector where BDD_Profile stores bead
+				 * counts, indexed by level */
     BDD_Quantifier quantifier;	/* Quantifier for BDD_Quantify */
     Tcl_HashTable quantifyCache;
 				/* Cache of partial results for BDD_Quantify */

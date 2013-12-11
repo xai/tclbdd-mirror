@@ -143,6 +143,8 @@ static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemNthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
+static int BddSystemProfileMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				  int, Tcl_Obj* const[]);
 static int BddSystemQuantifyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -259,6 +261,13 @@ const static Tcl_MethodType BddSystemNthvarMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemProfileMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "profile",			   /* name */
+    BddSystemProfileMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemQuantifyMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "quantify",			   /* name */
@@ -335,6 +344,7 @@ const static MethodTableRow systemMethodTable[] = {
     { "notnthvar", &BddSystemNotnthvarMethodType, NULL },
     { "nthvar",    &BddSystemNthvarMethodType,    NULL },
     { "oneof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_ONEOF },
+    { "profile",   &BddSystemProfileMethodType,   NULL },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
     { "twoof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_TWOOF },
@@ -1455,6 +1465,80 @@ BddSystemNotnthvarMethod(
     beadIndex = BDD_NotNthVariable(sdata->system, (BDD_VariableIndex) varNum);
     SetNamedExpression(sdata, objv[skipped], beadIndex);
     BDD_UnrefBead(sdata->system, beadIndex);
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemProfileMethod --
+ *
+ *	Profiles a BDD, reporting the number of beads at each level.
+ *
+ * Usage:
+ *	$sys profile $expr
+ *
+ * Parameters:
+ *	sys  - System of BDD's
+ *	expr - Name of an expression to profile.
+ *
+ * Results:
+ *	Returns a list of integers. The nth element of the list is the
+ *	number of beads at level n.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemProfileMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex u;		/* Expression to profile */
+    BDD_VariableIndex n = BDD_GetVariableCount(sdata->system);
+				/* Number of variables */
+    BDD_BeadIndex* v;		/* Vector of counts expressed as integers */
+    Tcl_Obj** countv;		/* Vector of counts expressed as Tcl_Obj */
+    BDD_VariableIndex i;
+
+    /*
+     * Process argument
+     */
+    if (objc != skipped+1) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "expr");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped],
+			    &u) != TCL_OK) {
+	return TCL_ERROR;
+    }
+
+    /*
+     * Get the profile counts
+     */
+    v = ckalloc(n * sizeof(BDD_BeadIndex));
+    BDD_Profile(sdata->system, u, n, v);
+
+    /*
+     * Convert profile to Tcl_Obj form
+     */
+    countv = ckalloc(n * sizeof(Tcl_Obj*));
+    for (i = 0; i < n; ++i) {
+	countv[i] = Tcl_NewWideIntObj((Tcl_WideInt) v[i]);
+    }
+    ckfree(v);
+    Tcl_SetObjResult(interp, Tcl_NewListObj(n, countv));
+    ckfree(countv);
     return TCL_OK;
 }
 

@@ -2398,6 +2398,58 @@ BDD_AllSatFinish(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_Profile --
+ *
+ *	Counts the number of beads in a BDD, broken out by level.
+ *
+ * Results:
+ *	None.
+ *
+ * Side effects:
+ *	Stores the counts in the caller-supplied vector 'counts'.
+ *	If the depth of the BDD is greater than or equal to the 
+ *	caller-supplied 'n', only nodes up to the given depth are
+ *	counted. The BDD_GetVariableCount call returns a value for
+ *	'n' that is guaranteed to be sufficient.
+ *
+ *-----------------------------------------------------------------------------
+ */
+static void
+Profile(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u)		/* BDD to count */
+{
+    Bead* beadPtr = sysPtr->beads + u;
+				/* Pointer to the current bead */
+    BDD_VariableIndex level = beadPtr->level;
+				/* Current bead's level */
+    int newFlag;	        /* Has this bead been seen before? */
+
+    if ((u <= 1) || (level >= sysPtr->profileDepth)) return;
+    Tcl_CreateHashEntry(&(sysPtr->profileCache), (void*) u, &newFlag);
+    if (newFlag) {
+	++(sysPtr->profileCounts[level]);
+	Profile(sysPtr, beadPtr->low);
+	Profile(sysPtr, beadPtr->high);
+    }
+}
+void
+BDD_Profile(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex u,		/* BDD to count */
+    BDD_VariableIndex n,	/* Maximum depth to count */
+    BDD_BeadIndex counts[])	/* OUTPUT: counts of beads by level */
+{
+    memset(counts, 0, n * sizeof(BDD_BeadIndex));
+    Tcl_InitHashTable(&(sysPtr->profileCache), TCL_ONE_WORD_KEYS);
+    sysPtr->profileDepth = n;
+    sysPtr->profileCounts = counts;
+    Profile(sysPtr, u);
+    Tcl_DeleteHashTable(&(sysPtr->profileCache));
+}
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_Dump --
  *
  *	Formats a BDD as a Tcl dictionary for debugging.
