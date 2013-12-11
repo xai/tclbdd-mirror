@@ -2391,63 +2391,166 @@ test bdd-17.16 {compose - more complex substitution} {
     -cleanup {rename sys {}}
 }
 
-# FIXME tests for appquant
-
-test bdd-18.n {relational product} {*}{
+test bdd-18.1 {appquant - wrong # args} {*}{
     -setup {
 	bdd::system create sys
-	sys nthvar a 0; sys notnthvar !a 0
-	sys nthvar b 1; sys notnthvar !b 1
-	sys nthvar c 2; sys notnthvar !c 2
-	sys nthvar d 3; sys notnthvar !d 3
-	sys nthvar e 4; sys notnthvar !e 4
-	sys nthvar f 5; sys notnthvar !f 5
-	sys nthvar g 6; sys notnthvar !g 6
-	sys nthvar h 7; sys notnthvar !h 7
-
-	sys &3 p a !b !c
-	sys & p p !d
-	sys &3 expr1 p !e !f
-	sys &3 expr2 p !g !h
-
-	sys &3 p !a b !c
-	sys & p p !d
-	sys &3 term1 p !e f
-	sys &3 term2 p !g h
-	sys | expr1 expr1 term1
-	sys | expr2 expr2 term2
-
-	sys &3 p !a !b c
-	sys & p p !d
-	sys &3 term1 p e !f
-	sys &3 term2 p g !h
-	sys | expr1 expr1 term1
-	sys | expr2 expr2 term2
-
-	sys &3 p !a !b !c
-	sys & p p d
-	sys &3 term1 p e f
-	sys &3 term2 p g h
-	sys | expr1 expr1 term1
-	sys | expr2 expr2 term2
-
-	sys unset p term1 term2
-
-	sys == result_sb e g
-	sys == term f h
-	sys & result_sb result_sb term
-	sys unset term
-
     }
     -body {
-	sys exists_& result_is {a b c d} expr1 expr2
-	list [expr {[sys beadindex result_is] == [sys beadindex result_sb]}] \
-	    [sys unset result_is result_sb expr1 expr2 \
-		 a b c d e f g h !a !b !c !d !e !f !g !h] \
-	    [sys gc]
+	sys exists_&
     }
-    -cleanup {rename sys {}}
-    -result {1 {} 2}
+    -cleanup {
+	rename sys {}
+    }
+    -result {wrong # args:*}
+    -returnCodes error
+    -match glob
+}
+
+test bdd-18.2 {appquant - bad lhs} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists_& x {} garbage 1} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-18.3 {appquant - bad rhs} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists_& x {} 1 garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-18.4 {appquant - bad var list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists_& x \{ 1 1} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {unmatched open brace in list} {TCL VALUE LIST BRACE}}
+}
+
+test bdd-18.5 {appquant - bad var} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists_& x garbage 1 1} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-18.6 {appquant - bad var} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys exists_& x 0 1 1} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {0 is not a variable} {BDD NotVariable 0}}
+}
+
+test bdd-18.7 {appquant - do nothing to nothing} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys exists_& x {} 1 1
+	list [sys beadindex x] [sys unset x] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result \
+	{1 {} 2}
+}
+
+foreach q {exists forall} {
+    foreach op {!= & < <= == > >= ^ nand nor |} {
+	set combination ${q}_${op}
+	test bdd-18.8-$combination {relational product} {*}{
+	    -setup {
+		bdd::system create sys
+		sys nthvar a 0; sys notnthvar !a 0
+		sys nthvar b 1; sys notnthvar !b 1
+		sys nthvar c 2; sys notnthvar !c 2
+		sys nthvar d 3; sys notnthvar !d 3
+		sys nthvar e 4; sys notnthvar !e 4
+		sys nthvar f 5; sys notnthvar !f 5
+		sys nthvar g 6; sys notnthvar !g 6
+		sys nthvar h 7; sys notnthvar !h 7
+		
+		sys &3 p a !b !c
+		sys & p p !d
+		sys &3 expr1 p !e !f
+		sys &3 expr2 p !g !h
+		
+		sys &3 p !a b !c
+		sys & p p !d
+		sys &3 term1 p !e f
+		sys &3 term2 p !g h
+		sys | expr1 expr1 term1
+		sys | expr2 expr2 term2
+		
+		sys &3 p !a !b c
+		sys & p p !d
+		sys &3 term1 p e !f
+		sys &3 term2 p g !h
+		sys | expr1 expr1 term1
+		sys | expr2 expr2 term2
+		
+		sys &3 p !a !b !c
+		sys & p p d
+		sys &3 term1 p e f
+		sys &3 term2 p g h
+		sys | expr1 expr1 term1
+		sys | expr2 expr2 term2
+		
+		sys unset p term1 term2
+		
+		sys $op opresult expr1 expr2
+		sys $q result_sb {a b c d} opresult
+		sys unset opresult
+	    }
+	    
+	    -body {
+		sys $combination result_is {a b c d} expr1 expr2
+		list [expr {[sys beadindex result_is] \
+				== [sys beadindex result_sb]}] \
+		    [sys unset result_is result_sb expr1 expr2 \
+			 a b c d e f g h !a !b !c !d !e !f !g !h] \
+		    [sys gc]
+	    }
+	    -cleanup {rename sys {}}
+	    -result {1 {} 2}
+	}
+    }
 }
 
 test bdd-21.1 {eight queens} {*}{
