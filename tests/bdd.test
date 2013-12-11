@@ -151,26 +151,42 @@ test bdd-6.2 {nthvar - bad var index} {
 
 test bdd-6.3 {nthvar - var 0} {
     -setup {bdd::system create sys}
-    -body {sys nthvar a 0; sys dump a}
+    -body {
+	sys nthvar a 0
+	set result [list [sys dump a]]
+	sys unset a
+	lappend result [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result {2 {0 0 1} 0 {1 0 0} 1 {1 1 1}}
+    -result {{2 {0 0 1} 0 {1 0 0} 1 {1 1 1}} 2}
 }
 
 test bdd-6.4 {nthvar - two vars} {
     -setup {bdd::system create sys}
-    -body {sys nthvar a 0; sys nthvar b 1; list [sys dump b] [sys dump a]}
+    -body {
+	sys nthvar a 0
+	sys nthvar b 1
+	set result [list [sys dump b] [sys dump a]]
+	sys unset a
+	sys unset b
+	lappend result [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result {{3 {1 0 1} 0 {2 0 0} 1 {2 1 1}} {2 {0 0 1} 0 {2 0 0} 1 {2 1 1}}}
+    -result {{3 {1 0 1} 0 {2 0 0} 1 {2 1 1}} {2 {0 0 1} 0 {2 0 0} 1 {2 1 1}} 2}
 }
 
 test bdd-6.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
     -setup {bdd::system create sys}
     -body {
-	sys nthvar a 0; sys nthvar b 1; sys nthvar c 0
-	list [sys beadindex a] [sys beadindex b] [sys beadindex c]
+	sys nthvar a 0;
+	sys nthvar b 1;
+	sys nthvar c 0
+	list [sys beadindex a] [sys beadindex b] [sys beadindex c] \
+	    [sys unset a] [sys unset b] [sys unset c] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result {2 3 2}
+    -result {2 3 2 {} {} {} 2}
 }
 
 test bdd-7.1 {notnthvar - wrong # args} {
@@ -192,29 +208,34 @@ test bdd-7.2 {notnthvar - bad var index} {
 
 test bdd-7.3 {notnthvar - var 0} {
     -setup {bdd::system create sys}
-    -body {sys notnthvar !a 0; sys dump !a}
+    -body {
+	sys notnthvar !a 0; 
+	list [sys dump !a] [sys unset !a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result {2 {0 1 0} 1 {1 1 1} 0 {1 0 0}}
+    -result {{2 {0 1 0} 1 {1 1 1} 0 {1 0 0}} {} 2}
 }
 
 test bdd-7.4 {notnthvar - two vars} {
     -setup {bdd::system create sys}
     -body {
 	sys notnthvar !a 0; sys notnthvar !b 1
-	list [sys dump !b] [sys dump !a]
+	list [sys dump !b] [sys dump !a] \
+	    [sys unset !b] [sys unset !a] [sys gc]
     }
     -cleanup {rename sys {}}
-    -result {{3 {1 1 0} 1 {2 1 1} 0 {2 0 0}} {2 {0 1 0} 1 {2 1 1} 0 {2 0 0}}}
+    -result {{3 {1 1 0} 1 {2 1 1} 0 {2 0 0}} {2 {0 1 0} 1 {2 1 1} 0 {2 0 0}} {} {} 2}
 }
 
 test bdd-7.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
     -setup {bdd::system create sys}
     -body {
 	sys notnthvar !a 0; sys notnthvar !b 1; sys notnthvar !c 0
-	list [sys beadindex !a] [sys beadindex !b] [sys beadindex !c]
+	list [sys beadindex !a] [sys beadindex !b] [sys beadindex !c] \
+	    [sys unset !a] [sys unset !b] [sys unset !c] [sys gc]
     }
     -cleanup {rename sys {}}
-    -result {2 3 2}
+    -result {2 3 2 {} {} {} 2}
 }
 
 test bdd-8.1 {negate - wrong # args} {
@@ -242,9 +263,13 @@ test bdd-8.3 {negate 0} {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
     }
-    -body {sys ~ b 0; sys beadindex b}
+    -body {
+	sys ~ b 0; 
+	list [sys beadindex b] \
+	    [sys unset b] [sys unset !a] [sys unset a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} {} {} 2}
 }
 
 test bdd-8.4 {negate 1} {
@@ -262,9 +287,13 @@ test bdd-8.5 {negate a} {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
     }
-    -body {sys ~ b a; expr {[sys beadindex b] == [sys beadindex !a]}}
+    -body {
+	sys ~ b a; 
+	list [expr {[sys beadindex b] == [sys beadindex !a]}] \
+	    [sys unset b] [sys unset !a] [sys unset a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} {} {} 2}
 }
 
 test bdd-8.5 {negate !a} {
@@ -272,9 +301,13 @@ test bdd-8.5 {negate !a} {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
     }
-    -body {sys ~ b !a; expr {[sys beadindex b] == [sys beadindex a]}}
+    -body {
+	sys ~ b !a; 
+	list [expr {[sys beadindex b] == [sys beadindex a]}] \
+	    [sys unset b] [sys unset !a] [sys unset a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} {} {} 2}
 }
 
 test bdd-9.1 {binop - wrong # args} {
@@ -326,10 +359,12 @@ test bdd-9.4 {binary nor operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys nor c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {0001 0010 0100 1000}
+    -result {0001 0010 0100 1000 2}
 }
 
 test bdd-9.5 {binary < operator} {*}{
@@ -348,10 +383,12 @@ test bdd-9.5 {binary < operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys < c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {0100 1000 0001 0010}
+    -result {0100 1000 0001 0010 2}
 }
 
 test bdd-9.6 {binary > operator} {*}{
@@ -370,10 +407,12 @@ test bdd-9.6 {binary > operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys > c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {0010 0001 1000 0100}
+    -result {0010 0001 1000 0100 2}
 }
 
 test bdd-9.7 {binary ^ operator} {*}{
@@ -392,10 +431,12 @@ test bdd-9.7 {binary ^ operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys ^ c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {0110 1001 1001 0110}
+    -result {0110 1001 1001 0110 2}
 }
 
 test bdd-9.8 {binary nand operator} {*}{
@@ -414,10 +455,12 @@ test bdd-9.8 {binary nand operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys nand c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {0111 1011 1101 1110}
+    -result {0111 1011 1101 1110 2}
 }
 test bdd-9.9 {binary & operator} {*}{
     -setup {
@@ -432,14 +475,15 @@ test bdd-9.9 {binary & operator} {*}{
 	sys & c a !b
 	lappend tables [truthtable [sys dump c] 2]
 	sys & c !a b
-
 	lappend tables [truthtable [sys dump c] 2]
 	sys & c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {1000 0100 0010 0001}
+    -result {1000 0100 0010 0001 2}
 }
 
 test bdd-9.10 {binary == operator} {*}{
@@ -458,10 +502,12 @@ test bdd-9.10 {binary == operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys == c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result  {1001 0110 0110 1001}
+    -result  {1001 0110 0110 1001 2}
 }
 
 test bdd-9.11 {binary <= operator} {*}{
@@ -480,10 +526,12 @@ test bdd-9.11 {binary <= operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys <= c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {1101 1110 0111 1011}
+    -result {1101 1110 0111 1011 2}
 }
 
 test bdd-9.12 {binary >= operator} {*}{
@@ -502,10 +550,12 @@ test bdd-9.12 {binary >= operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys >= c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {1011 0111 1110 1101}
+    -result {1011 0111 1110 1101 2}
 }
 
 test bdd-9.13 {binary | operator} {*}{
@@ -524,10 +574,12 @@ test bdd-9.13 {binary | operator} {*}{
 	lappend tables [truthtable [sys dump c] 2]
 	sys | c a b
 	lappend tables [truthtable [sys dump c] 2]
+	sys unset a !a b !b c
+	lappend tables [sys gc]
 	set tables
     }
     -cleanup {rename sys {}}
-    -result {1110 1101 1011 0111}
+    -result {1110 1101 1011 0111 2}
 }
 
 test bdd-10.1 {syllogism in the mode of barbara} {
@@ -551,10 +603,13 @@ test bdd-10.1 {syllogism in the mode of barbara} {
 	    [expr {[sys beadindex test0] == 1}] \
 	    [expr {[sys beadindex test1] == 1}] \
 	    [expr {[sys beadindex test2] == 1}] \
-	    [truthtable [sys dump conjunct] 3]
+	    [truthtable [sys dump conjunct] 3] \
+	    [sys unset test2 test1 test0 conclusion conjunct minor major \
+		 socrates(x) mortal(x) man(x)] \
+	    [sys gc]
     } 
     -cleanup {rename sys {}}
-    -result {0 0 1 10110001}
+    -result {0 0 1 10110001 {} 2}
 }
 
 test bdd-11.1 {demorgan} {
@@ -566,9 +621,11 @@ test bdd-11.1 {demorgan} {
     -body {
 	sys & c a b
 	sys nor d !a !b
-	expr {[sys beadindex c] == [sys beadindex d]}
+	list [expr {[sys beadindex c] == [sys beadindex d]}] \
+	    [sys unset d c !b b !a a] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {
 	rename sys {}
    }
@@ -583,9 +640,11 @@ test bdd-11.2 {demorgan} {
     -body {
 	sys | c a b
 	sys nand d !a !b
-	expr {[sys beadindex c] == [sys beadindex d]}
+	list [expr {[sys beadindex c] == [sys beadindex d]}] \
+	    [sys unset d c !b b !a a] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {
 	rename sys {}
    }
@@ -600,9 +659,11 @@ test bdd-11.3 {demorgan} {
     -body {
 	sys ^ c a b
 	sys ^ d !a !b
-	expr {[sys beadindex c] == [sys beadindex d]}
+	list [expr {[sys beadindex c] == [sys beadindex d]}] \
+	    [sys unset d c !b b !a a] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {
 	rename sys {}
    }
@@ -618,9 +679,11 @@ test bdd-11.4 {demorgan} {
 	sys & c a b
 	sys | d !a !b
 	sys ~ d d
-	expr {[sys beadindex c] == [sys beadindex d]}
+	list [expr {[sys beadindex c] == [sys beadindex d]}] \
+	    [sys unset d c !b b !a a] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {
 	rename sys {}
    }
@@ -636,9 +699,11 @@ test bdd-11.5 {demorgan} {
 	sys | c a b
 	sys & d !a !b
 	sys ~ d d
-	expr {[sys beadindex c] == [sys beadindex d]}
+	list [expr {[sys beadindex c] == [sys beadindex d]}] \
+	    [sys unset d c !b b !a a] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {
 	rename sys {}
    }
@@ -654,9 +719,11 @@ test bdd-11.6 {demorgan} {
 	sys ^ c a b
 	sys == d !a !b
 	sys ~ d d
-	expr {[sys beadindex c] == [sys beadindex d]}
+	list [expr {[sys beadindex c] == [sys beadindex d]}] \
+	    [sys unset d c !b b !a a] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {
 	rename sys {}
    }
@@ -681,37 +748,47 @@ test bdd-12.2 {satcount - no such expr} {
 
 test bdd-12.3 {satcount - zero} {
     -setup {bdd::system create sys}
-    -body {sys satcount 0}
+    -body {
+	list [sys satcount 0] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 0
+    -result {0 2}
 }
     
 test bdd-12.4 {satcount - no vars} {
     -setup {bdd::system create sys}
-    -body {sys satcount 1}
+    -body {
+	list [sys satcount 1] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 2}
 }
 
 test bdd-12.5 {satcount - one var} {
     -setup {bdd::system create sys; sys nthvar a 0}
-    -body {sys satcount 1}
+    -body {
+	list [sys satcount 1] [sys unset a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 2
+    -result {2 {} 2}
 }
 
 test bdd-12.6 {satcount - two vars} {
     -setup {bdd::system create sys; sys nthvar a 1}
-    -body {sys satcount 1}
+    -body {
+	list [sys satcount 1] [sys unset a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 4
+    -result {4 {} 2}
 }
 
 test bdd-12.7 {satcount - three vars} {
     -setup {bdd::system create sys; sys nthvar a 2}
-    -body {sys satcount 1}
+    -body {
+	list [sys satcount 1] [sys unset a] [sys gc]
+    }
     -cleanup {rename sys {}}
-    -result 8
+    -result {8 {} 2}
 }
 
 test bdd-12.8 {satcount - one var of three} {
@@ -722,12 +799,13 @@ test bdd-12.8 {satcount - one var of three} {
 	sys nthvar c 2
     }
     -body {
-	list [sys satcount a] [sys satcount b] [sys satcount c]
+	list [sys satcount a] [sys satcount b] [sys satcount c] \
+	    [sys unset c b a] [sys gc]
     }
     -cleanup {
 	rename sys {}
     }
-    -result {4 4 4}
+    -result {4 4 4 {} 2}
 }
 
 test bdd-12.9 {satcount - two vars of three} {
@@ -741,12 +819,13 @@ test bdd-12.9 {satcount - two vars of three} {
 	sys | r1 a b
 	sys | r2 a c
 	sys | r3 b c
-	list [sys satcount r1] [sys satcount r2] [sys satcount r3]
+	list [sys satcount r1] [sys satcount r2] [sys satcount r3] \
+	    [sys unset r3 r2 r1 c b a] [sys gc]
     }
     -cleanup {
 	rename sys {}
     }
-    -result {6 6 6}
+    -result {6 6 6 {} 2}
 }
 
 test bdd-12.10 {satcount - complex expr} {
@@ -771,12 +850,14 @@ test bdd-12.10 {satcount - complex expr} {
 	sys | r2 r2 h
 	sys & r1 r1 r2
 	sys ~ r2 r1
-	list [sys satcount r1] [sys satcount r2]
+	list [sys satcount r1] [sys satcount r2] \
+	    [sys unset r2 r1 j h g f e d c b a] \
+	    [sys gc]
     }
     -cleanup {
 	rename sys {}
     }
-    -result {210 302}
+    -result {210 302 {} 2}
 }
 
 test bdd-12.11 {satcount - parity tree} {
@@ -794,12 +875,18 @@ test bdd-12.11 {satcount - parity tree} {
 	for {set i 1} {$i < 128} {incr i 2} {
 	    sys ^ r0 r0 v$i
 	}
-	list [dict size [sys dump r0]] [format %llx [sys satcount r0]]
+	set result [list [dict size [sys dump r0]] \
+			[format %llx [sys satcount r0]]]
+	sys unset r0
+	for {set i 0} {$i < 128} {incr i} {
+	    sys unset v$i
+	}
+	lappend result [sys gc]
     }
     -cleanup {
 	rename sys {}
     }
-    -result {257 80000000000000000000000000000000}
+    -result {257 80000000000000000000000000000000 2}
 }
 
 test bdd-13.1 {restrict - wrong # args} {*}{
@@ -876,10 +963,12 @@ test bdd-13.5 {restrict - do nothing gracefully} {*}{
     }
     -body {
 	sys restrict r1 r2
-	expr {[sys beadindex r1] == [sys beadindex r2]}
+	list [expr {[sys beadindex r1] == [sys beadindex r2]}] \
+	    [sys unset r1 r2 c !c b !b a !a] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-13.6 {restrict by literal} {*}{
@@ -894,10 +983,12 @@ test bdd-13.6 {restrict by literal} {*}{
     -body {
 	sys restrict r1 r2 !b
 	sys ^ r3 a c 
-	expr {[sys beadindex r1] == [sys beadindex r3]}
+	list [expr {[sys beadindex r1] == [sys beadindex r3]}] \
+	    [sys unset r3 r2 r1 !c c !b b !a a] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-13.7 {restrict by two literals} {*}{
@@ -911,10 +1002,12 @@ test bdd-13.7 {restrict by two literals} {*}{
     }
     -body {
 	sys restrict r1 r2 a c
-	expr {[sys beadindex r1] == [sys beadindex b]}
+	list [expr {[sys beadindex r1] == [sys beadindex b]}] \
+	    [sys unset r2 r1 !c c !b b !a a] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-13.8 {restrict by two disordered literals} {*}{
@@ -928,10 +1021,12 @@ test bdd-13.8 {restrict by two disordered literals} {*}{
     }
     -body {
 	sys restrict r1 r2 c a
-	expr {[sys beadindex r1] == [sys beadindex b]}
+	list [expr {[sys beadindex r1] == [sys beadindex b]}] \
+	    [sys unset r2 r1 c !c b !b a !a] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-13.9 {restrict - reduce to constant} {*}{
@@ -946,12 +1041,14 @@ test bdd-13.9 {restrict - reduce to constant} {*}{
 	sys & r1 r1 c
 	sys restrict r1 r1 a b
 	sys restrict r2 r1 c
-	sys beadindex r2
+	list [sys beadindex r2] \
+	    [sys unset r2 r1 c b a] \
+	    [sys gc]
     }
     -cleanup {
 	rename sys {}
     }
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-13.10 {restrict zero} {*}{
@@ -965,10 +1062,12 @@ test bdd-13.10 {restrict zero} {*}{
     }
     -body {
 	sys restrict r1 0 a c
-	sys beadindex r1
+	list [sys beadindex r1] \
+	    [sys unset r2 c !c b !b a !a] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 0
+    -result {0 {} 2}
 }
 
 test bdd-13.11 {restrict one} {*}{
@@ -982,10 +1081,12 @@ test bdd-13.11 {restrict one} {*}{
     }
     -body {
 	sys restrict r1 1 a c
-	sys beadindex r1
+	list [sys beadindex r1] \
+	    [sys unset r1 r2 c b a !c !b !a] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-14.1 {foreach_sat - wrong # args} {*}{
@@ -1076,12 +1177,14 @@ test bdd-14.6 {foreach_sat - usual case} {*}{
 	sys foreach_sat x z {
 	    lappend result $x
 	}
+	sys unset z y a b c d
+	lappend result [sys gc]
 	set result
     }
     -cleanup {
 	rename sys {}
     }
-    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1} {0 0 1 1 2 1} {0 1}}
+    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1} {0 0 1 1 2 1} {0 1} 2}
 }
 
 test bdd-14.7 {foreach_sat - continue} {*}{
@@ -1099,12 +1202,14 @@ test bdd-14.7 {foreach_sat - continue} {*}{
 	    if {[dict exists $x 3]} continue
 	    lappend result $x
 	}
+	sys unset z y a b c d
+	lappend result [sys gc]
 	set result
     }
     -cleanup {
 	rename sys {}
     }
-    -result {{0 0 1 1 2 1} {0 1}}
+    -result {{0 0 1 1 2 1} {0 1} 2}
 }
 
 test bdd-14.8 {foreach_sat - break} {*}{
@@ -1122,12 +1227,14 @@ test bdd-14.8 {foreach_sat - break} {*}{
 	    if {![dict exists $x 3]} break
 	    lappend result $x
 	}
+	sys unset z y a b c d
+	lappend result [sys gc]
 	set result
     }
     -cleanup {
 	rename sys {}
     }
-    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1}}
+    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1} 2}
 }
 
 test bdd-14.9 {foreach_sat - return} {*}{
@@ -1150,13 +1257,16 @@ test bdd-14.9 {foreach_sat - return} {*}{
 	sys & y b c
 	sys | z z y
 	sys | z z d
-	bdd-14.9
+	set result [bdd-14.9]
+	sys unset z y a b c d
+	lappend result [sys gc]
+	set result
     }
     -cleanup {
 	rename sys {}
 	rename bdd-14.9 {}
     }
-    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1}}
+    -result {{0 0 1 0 3 1} {0 0 1 1 2 0 3 1} 2}
 }
 
 test bdd-14.10 {foreach_sat - error} {*}{
@@ -1170,17 +1280,19 @@ test bdd-14.10 {foreach_sat - error} {*}{
 	sys & y b c
 	sys | z z y
 	sys | z z d
-	list \
-	    [catch {
-		sys foreach_sat x z {
-		    if {![dict exists $x 3]} {
-			error testing
-		    }
-		    lappend result $x
-		}
-	    } result] \
-	    $result \
-	    $::errorInfo
+	set result [list \
+			[catch {
+			    sys foreach_sat x z {
+				if {![dict exists $x 3]} {
+				    error testing
+				}
+				lappend result $x
+			    }
+			} result] \
+			$result \
+			$::errorInfo]
+	sys unset z y a b c d
+	lappend result [sys gc]
     }
     -cleanup {
 	rename sys {}
@@ -1191,7 +1303,7 @@ test bdd-14.10 {foreach_sat - error} {*}{
 "error testing"
    ('foreach_sat' body, line 3)
     invoked from within
-*}}
+*} 2}
 }
 
 test bdd-14.11 {foreach_sat - unusual return} {*}{
@@ -1205,21 +1317,24 @@ test bdd-14.11 {foreach_sat - unusual return} {*}{
 	sys & y b c
 	sys | z z y
 	sys | z z d
-	list \
-	    [catch {
-		sys foreach_sat x z {
-		    if {![dict exists $x 3]} {
-			return -code 6 -level 0 testing
-		    }
-		    lappend result $x
-		}
-	    } result] \
-	    $result
+	set result \
+	    [list \
+		 [catch {
+		     sys foreach_sat x z {
+			 if {![dict exists $x 3]} {
+			     return -code 6 -level 0 testing
+			 }
+			 lappend result $x
+		     }
+		 } result] \
+		 $result]
+	sys unset y z a b c d
+	lappend result [sys gc]
     }
     -cleanup {
 	rename sys {}
     }
-    -result {6 testing}
+    -result {6 testing 2}
 }
 
 test bdd-15.1.1 {quantifiers - wrong # args} {*}{
@@ -1415,10 +1530,12 @@ test bdd-15.8.1 {quantifiers - do nothing gracefully} {*}{
 	    sys exists z {} $ex
 	    lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
 	}
+	sys unset z c b a
+	lappend result [sys gc]
 	set result
     }
     -cleanup {rename sys {}}
-    -result {1 1 1 1 1}
+    -result {1 1 1 1 1 2}
 }
 
 test bdd-15.8.2 {quantifiers - do nothing gracefully} {*}{
@@ -1434,10 +1551,12 @@ test bdd-15.8.2 {quantifiers - do nothing gracefully} {*}{
 	    sys forall z {} $ex
 	    lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
 	}
+	sys unset z c a b
+	lappend result [sys gc]
 	set result
     }
     -cleanup {rename sys {}}
-    -result {1 1 1 1 1}
+    -result {1 1 1 1 1 2}
 }
 
 test bdd-15.9.1 {quantifiers - irrelevant variable} {*}{
@@ -1458,10 +1577,12 @@ test bdd-15.9.1 {quantifiers - irrelevant variable} {*}{
 		lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
 	    }
 	}
+	sys unset z p q r a b c
+	lappend result [sys gc]
 	set result
     }
     -cleanup {rename sys {}}
-    -result {1 1 1 1 1 1 1 1 1 1 1 1 1 1 1}
+    -result {1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2}
 }
 
 test bdd-15.9.2 {quantifiers - irrelevant variable} {*}{
@@ -1482,10 +1603,12 @@ test bdd-15.9.2 {quantifiers - irrelevant variable} {*}{
 		lappend result [expr {[sys beadindex z] == [sys beadindex $ex]}]
 	    }
 	}
+	sys unset z p q r a b c
+	lappend result [sys gc]
 	set result
     }
     -cleanup {rename sys {}}
-    -result {1 1 1 1 1 1 1 1 1 1 1 1 1 1 1}
+    -result {1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2}
 }
 
 test bdd-15.10 {existential quantifier} {*}{
@@ -1504,10 +1627,12 @@ test bdd-15.10 {existential quantifier} {*}{
 	sys | ye ye c
 	sys | ye ye d
 	sys exists ze {e f} expr
-	expr {[sys beadindex ze] == [sys beadindex ye]}
+	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
+	    [sys unset ye ze term expr a b c d e f !e !f] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result {1}
+    -result {1 {} 2}
 }
 
 test bdd-15.11 {universal quantifier} {*}{
@@ -1526,10 +1651,12 @@ test bdd-15.11 {universal quantifier} {*}{
 	sys & yu yu c
 	sys & yu yu d
 	sys forall zu {e f} expr
-	expr {[sys beadindex zu] == [sys beadindex yu]}
+	list [expr {[sys beadindex zu] == [sys beadindex yu]}] \
+	    [sys unset zu yu expr term e !e f !f a b c d] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result {1}
+    -result {1 {} 2}
 }
 
 foreach operation {
@@ -1577,11 +1704,15 @@ foreach operation {
 	    sys nthvar b 0; sys notnthvar !b 0
 	    sys nthvar c 0; sys notnthvar !c 0
 	}
-	-body {list [catch {sys $operation z a garbage c} result] \
-		   $result $::errorCode}
+	-body {
+	    list [catch {sys $operation z a garbage c} result] \
+		$result $::errorCode \
+		[sys unset a !a b !b c !c] \
+		[sys gc]
+	     }
 	-cleanup {rename sys {}}
 	-result \
-	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage} {} 2}
     }
 }
 
@@ -1595,11 +1726,15 @@ foreach operation {
 	    sys nthvar b 0; sys notnthvar !b 0
 	    sys nthvar c 0; sys notnthvar !c 0
 	}
-	-body {list [catch {sys $operation z a b garbage} result] \
-		   $result $::errorCode}
+	-body {
+	    list [catch {sys $operation z a b garbage} result] \
+		$result $::errorCode \
+		[sys unset a b c !a !b !c] \
+		[sys gc]
+	}
 	-cleanup {rename sys {}}
 	-result \
-	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+	    {1 {expression named "garbage" not found} {BDD ExprNotFound garbage} {} 2}
     }
 }
 
@@ -1617,9 +1752,11 @@ test bdd-16.5 {ternary nor} {*}{
 	sys | t p q
 	sys | t t r
 	sys ~ z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z y t p q r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1645,9 +1782,11 @@ test bdd-16.6 {ternary oneof} {*}{
 	sys & t !p !q
 	sys & t t r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1673,10 +1812,12 @@ test bdd-16.7 {ternary twoof} {*}{
 	sys & t !p q
 	sys & t t r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z y t p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
     -cleanup {rename sys {}}
+    -result {1 {} 2}
 }
 
 test bdd-16.7 {ternary even} {*}{
@@ -1695,9 +1836,11 @@ test bdd-16.7 {ternary even} {*}{
 	sys even3 y p q r
 	sys ^ z p q
 	sys ^ z z !r
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1718,9 +1861,11 @@ test bdd-16.8 {ternary differ} {*}{
 	sys &3 z p q r
 	sys &3 t !p !q !r
 	sys nor z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset y z t p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1740,10 +1885,12 @@ test bdd-16.9 {ternary nand} {*}{
 	sys nand3 y p q r
 	sys &3 z p q r
 	sys ~ z z
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
     -cleanup {rename sys {}}
+    -result {1 {} 2}
 }
 
 test bdd-16.10 {ternary concurrence} {*}{
@@ -1763,9 +1910,11 @@ test bdd-16.10 {ternary concurrence} {*}{
 	sys &3 z p q r
 	sys &3 t !p !q !r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y !p !q !r p q r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1790,9 +1939,11 @@ test bdd-16.11 {ternary - borrow bit of subtraction} {*}{
 	sys | z z t
 	sys &3 t  p  q  r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1817,9 +1968,11 @@ test bdd-16.12 {ternary - borrow bit of subtraction} {*}{
 	sys | z z t
 	sys &3 t  p  q  r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1839,9 +1992,11 @@ test bdd-16.13 {ternary - xor} {*}{
 	sys ^3 y p q r
 	sys ^ z p q
 	sys ^ z z r
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1862,9 +2017,11 @@ test bdd-16.14 {ternary - ?:} {*}{
 	sys & z p q
 	sys & t !p r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y !p !q !r p q r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1889,9 +2046,11 @@ test bdd-16.15 {ternary - median} {*}{
 	sys | z z t
 	sys &3 t p q r
 	sys | z z t
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z t y p q r !p !q !r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1911,9 +2070,11 @@ test bdd-16.16 {ternary - or} {*}{
 	sys |3 y p q r
 	sys | z p q
 	sys | z z r
-	expr {[sys beadindex y] == [sys beadindex z]}
+	list [expr {[sys beadindex y] == [sys beadindex z]}] \
+	    [sys unset z y !p !q !r p q r a b c d e f] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -1961,11 +2122,12 @@ test bdd-17.4 {compose - bad var} {*}{
 	sys nthvar a 0
     }
     -body {
-	list [catch {sys compose x a garbage 0} result] $result $::errorCode
+	list [catch {sys compose x a garbage 0} result] $result $::errorCode \
+	    [sys unset a] [sys gc]
     }
     -cleanup {rename sys {}}
     -result \
-	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage} {} 2}
 }
 
 test bdd-17.5 {compose - bad var} {*}{
@@ -1976,11 +2138,12 @@ test bdd-17.5 {compose - bad var} {*}{
 	sys & c a b
     }
     -body {
-	list [catch {sys compose x a c 0} result] $result $::errorCode
+	list [catch {sys compose x a c 0} result] $result $::errorCode \
+	    [sys unset a b c] [sys gc]
     }
     -cleanup {rename sys {}}
     -result \
-	{1 {c is not a variable} {BDD NotVariable c}}
+	{1 {c is not a variable} {BDD NotVariable c} {} 2}
 }
 
 test bdd-17.6 {compose - bad var} {*}{
@@ -1990,11 +2153,12 @@ test bdd-17.6 {compose - bad var} {*}{
 	sys notnthvar !b 1
     }
     -body {
-	list [catch {sys compose x a !b 0} result] $result $::errorCode
+	list [catch {sys compose x a !b 0} result] $result $::errorCode \
+	    [sys unset a !b] [sys gc]
     }
     -cleanup {rename sys {}}
     -result \
-	{1 {!b is not a variable} {BDD NotVariable !b}}
+	{1 {!b is not a variable} {BDD NotVariable !b} {} 2}
 }
 
 test bdd-17.7 {compose - bad replacement expr} {*}{
@@ -2004,11 +2168,12 @@ test bdd-17.7 {compose - bad replacement expr} {*}{
 	sys nthvar b 1
     }
     -body {
-	list [catch {sys compose x a b garbage} result] $result $::errorCode
+	list [catch {sys compose x a b garbage} result] $result $::errorCode \
+	    [sys unset a b] [sys gc]
     }
     -cleanup {rename sys {}}
     -result \
-	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage} {} 2}
 }
 
 test bdd-17.8 {compose - do nothing gracefully} {*}{
@@ -2020,10 +2185,12 @@ test bdd-17.8 {compose - do nothing gracefully} {*}{
     }
     -body {
 	sys compose d c
-	expr {[sys beadindex d] == [sys beadindex c]}
+	list [expr {[sys beadindex d] == [sys beadindex c]}] \
+	    [sys unset a b c d] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-17.9 {compose with irrelevant variable} {*}{
@@ -2038,10 +2205,12 @@ test bdd-17.9 {compose with irrelevant variable} {*}{
     }
     -body {
 	sys compose d c p 0
-	expr {[sys beadindex d] == [sys beadindex c]}
+	list [expr {[sys beadindex d] == [sys beadindex c]}] \
+	    [sys unset a b c d p q r] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-17.10 {compose with irrelevant variable} {*}{
@@ -2056,10 +2225,12 @@ test bdd-17.10 {compose with irrelevant variable} {*}{
     }
     -body {
 	sys compose d c q 0
-	expr {[sys beadindex d] == [sys beadindex c]}
+	list [expr {[sys beadindex d] == [sys beadindex c]}] \
+	    [sys unset a b c p q r d] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-17.10 {compose with irrelevant variable} {*}{
@@ -2074,10 +2245,12 @@ test bdd-17.10 {compose with irrelevant variable} {*}{
     }
     -body {
 	sys compose d c r 0
-	expr {[sys beadindex d] == [sys beadindex c]}
+	list [expr {[sys beadindex d] == [sys beadindex c]}] \
+	    [sys unset a b c p q r d] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result 1
+    -result {1 {} 2}
 }
 
 test bdd-17.11 {compose - replace with constant} {*}{
@@ -2097,10 +2270,12 @@ test bdd-17.11 {compose - replace with constant} {*}{
 			"should be $y"
 		}
 	    }
+	sys unset a !a b !b c z
+	lappend trouble [sys gc]
 	join $trouble \n
     }
     -cleanup {rename sys {}}
-    -result {}
+    -result 2
 }
 
 test bdd-17.12 {compose - replace with variable} {*}{
@@ -2118,14 +2293,16 @@ test bdd-17.12 {compose - replace with variable} {*}{
 	foreach x {p a q b r} {
 	    sys compose d c a $x
 	    sys & e $x b
-	    if {[sys beadindex d] != [sys beadindex d]} {
+	    if {[sys beadindex d] != [sys beadindex e]} {
 		lappend trouble "a&$x should be the same as (a&b)\[$x/b]"
 	    }
 	}
+	sys unset a b c p q r !a !b !c !p !q !r d e
+	lappend trouble [sys gc]
 	join $trouble \n
     }
     -cleanup {rename sys {}}
-    -result {}
+    -result {2}
 }
 
 test bdd-17.13 {compose - interchange variables} {
@@ -2138,9 +2315,11 @@ test bdd-17.13 {compose - interchange variables} {
     } 
     -body {
 	sys compose z c a b b a
-	expr {[sys beadindex z] == [sys beadindex y]}
+	list [expr {[sys beadindex z] == [sys beadindex y]}] \
+	    [sys unset z y c a b !a !b] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -2159,9 +2338,11 @@ test bdd-17.14 {compose - interchange variables} {
     } 
     -body {
 	sys compose z x a b b c c a
-	expr {[sys beadindex z] == [sys beadindex y]}
+	list [expr {[sys beadindex z] == [sys beadindex y]}] \
+	    [sys unset z y t x a b c !a !b !c] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
@@ -2180,13 +2361,15 @@ test bdd-17.15 {compose - interchange variables} {
     } 
     -body {
 	sys compose z x b a c b a c
-	expr {[sys beadindex z] == [sys beadindex y]}
+	list [expr {[sys beadindex z] == [sys beadindex y]}] \
+	    [sys unset z t y x a b c !a !b !c] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
 }
 
-test bdd-17.15 {compose - more complex substitution} {
+test bdd-17.16 {compose - more complex substitution} {
     -setup {
 	bdd::system create sys
 	sys nthvar a 0
@@ -2200,10 +2383,71 @@ test bdd-17.15 {compose - more complex substitution} {
     } 
     -body {
 	sys compose z x a t b u
-	expr {[sys beadindex z] == [sys beadindex y]}
+	list [expr {[sys beadindex z] == [sys beadindex y]}] \
+	    [sys unset x y z t u a b c d] \
+	    [sys gc]
     }
-    -result 1
+    -result {1 {} 2}
     -cleanup {rename sys {}}
+}
+
+# FIXME tests for appquant
+
+test bdd-18.n {relational product} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys nthvar d 3; sys notnthvar !d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys nthvar g 6; sys notnthvar !g 6
+	sys nthvar h 7; sys notnthvar !h 7
+
+	sys &3 p a !b !c
+	sys & p p !d
+	sys &3 expr1 p !e !f
+	sys &3 expr2 p !g !h
+
+	sys &3 p !a b !c
+	sys & p p !d
+	sys &3 term1 p !e f
+	sys &3 term2 p !g h
+	sys | expr1 expr1 term1
+	sys | expr2 expr2 term2
+
+	sys &3 p !a !b c
+	sys & p p !d
+	sys &3 term1 p e !f
+	sys &3 term2 p g !h
+	sys | expr1 expr1 term1
+	sys | expr2 expr2 term2
+
+	sys &3 p !a !b !c
+	sys & p p d
+	sys &3 term1 p e f
+	sys &3 term2 p g h
+	sys | expr1 expr1 term1
+	sys | expr2 expr2 term2
+
+	sys unset p term1 term2
+
+	sys == result_sb e g
+	sys == term f h
+	sys & result_sb result_sb term
+	sys unset term
+
+    }
+    -body {
+	sys exists_& result_is {a b c d} expr1 expr2
+	list [expr {[sys beadindex result_is] == [sys beadindex result_sb]}] \
+	    [sys unset result_is result_sb expr1 expr2 \
+		 a b c d e f g h !a !b !c !d !e !f !g !h] \
+	    [sys gc]
+    }
+    -cleanup {rename sys {}}
+    -result {1 {} 2}
 }
 
 test bdd-21.1 {eight queens} {*}{
@@ -2235,6 +2479,7 @@ test bdd-21.1 {eight queens} {*}{
 		}
 		sys <= columnC $q1 columnC
 		sys & cellC cellC columnC
+		sys unset columnC
 		
 		# queen here <= no other queen in the same row
 
@@ -2247,6 +2492,7 @@ test bdd-21.1 {eight queens} {*}{
 		}
 		sys <= rowC $q1 rowC
 		sys & cellC cellC rowC
+		sys unset rowC
 
 		# queen here <= no other queen in the same diagonal
 
@@ -2268,18 +2514,22 @@ test bdd-21.1 {eight queens} {*}{
 		}
 		sys <= diag1C $q1 diag1C
 		sys & cellC cellC diag1C
+		sys unset diag1C
 
 		sys <= diag2C $q1 diag2C
 		sys & cellC cellC diag2C
+		sys unset diag2C
 
 		# accumulate into the constraint set for the row
 
 		sys & thisRowC thisRowC cellC
+		sys unset cellC
 	    }
 
 	    # accumulate all constraints for a row into the solution
 
 	    sys & solution solution thisRowC
+	    sys unset thisRowC
 	}
 		
 	# at least one queen in each column
@@ -2290,7 +2540,10 @@ test bdd-21.1 {eight queens} {*}{
 		sys | columnC columnC $q
 	    }
 	    sys & solution solution columnC
+	    sys unset columnC
 	}
+
+	# enumerate solutions
 	sys foreach_sat A solution {
 	    set sol [lrepeat 8 {}]
 	    foreach {var value} $A {
@@ -2300,11 +2553,19 @@ test bdd-21.1 {eight queens} {*}{
 	    }
 	    lappend sols [join $sol {}]
 	}
+
+	# clean up
+	sys unset solution
+	for {set i 0} {$i < 64} {incr i} {
+	    sys unset v$i !v$i
+	}
+	lappend sols [sys gc]
+
 	lreverse $sols
 
     }
     -cleanup {rename sys {}}
-    -result {04752613 05726314 06357142 06471352 13572064 14602753 14630752 15063724 15720364 16257403 16470352 17502463 20647135 24170635 24175360 24603175 24730615 25147063 25160374 25164073 25307461 25317460 25703641 25704613 25713064 26174035 26175304 27360514 30471625 30475261 31475026 31625704 31625740 31640752 31746025 31750246 35041726 35716024 35720641 36074152 36271405 36415027 36420571 37025164 37046152 37420615 40357162 40731625 40752613 41357206 41362750 41506372 41703625 42057136 42061753 42736051 46027531 46031752 46137025 46152037 46152073 46302751 47302516 47306152 50417263 51602473 51603742 52064713 52073164 52074136 52460317 52470316 52613704 52617403 52630714 53047162 53174602 53602417 53607142 57130642 60275314 61307425 61520374 62057413 62714053 63147025 63175024 64205713 71306425 71420635 72051463 73025164}
+    -result {2 04752613 05726314 06357142 06471352 13572064 14602753 14630752 15063724 15720364 16257403 16470352 17502463 20647135 24170635 24175360 24603175 24730615 25147063 25160374 25164073 25307461 25317460 25703641 25704613 25713064 26174035 26175304 27360514 30471625 30475261 31475026 31625704 31625740 31640752 31746025 31750246 35041726 35716024 35720641 36074152 36271405 36415027 36420571 37025164 37046152 37420615 40357162 40731625 40752613 41357206 41362750 41506372 41703625 42057136 42061753 42736051 46027531 46031752 46137025 46152037 46152073 46302751 47302516 47306152 50417263 51602473 51603742 52064713 52073164 52074136 52460317 52470316 52613704 52617403 52630714 53047162 53174602 53602417 53607142 57130642 60275314 61307425 61520374 62057413 62714053 63147025 63175024 64205713 71306425 71420635 72051463 73025164}
 }
 
 test bdd-21.2 {verification of a full adder} {
@@ -2363,12 +2624,15 @@ test bdd-21.2 {verification of a full adder} {
 	sys | co gate1 gate3
 
 	list [expr {[sys beadindex co] == [sys beadindex spec_co]}] \
-	    [expr {[sys beadindex z] == [sys beadindex spec_z]}]
+	    [expr {[sys beadindex z] == [sys beadindex spec_z]}] \
+	    [sys unset x y ci !x !y !ci spec_co spec_z input \
+		 gate1 gate2 gate3 z co] \
+	    [sys gc]
     }
     -cleanup {rename sys {}}
-    -result {1 1}
+    -result {1 1 {} 2}
 }
-		
+
 cleanupTests
 return
 

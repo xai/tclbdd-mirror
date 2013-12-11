@@ -86,6 +86,22 @@ typedef struct MethodTableRow {
 } MethodTableRow;
 
 /*
+ * Row in a quantifier table
+ */
+typedef struct QuantifierTableRow {
+    const char* name;		/* Name of the quantifier */
+    BDD_Quantifier quant;	/* Quantifier */
+} QuantifierTableRow;
+
+/*
+ * Row in a binary operator table
+ */
+typedef struct BinOpTableRow {
+    const char* name;		/* Name of the operator */
+    BDD_BinOp op;		/* Operator */
+} BinOpTableRow;
+
+/*
  * Static functions defined within this file
  */
 
@@ -101,6 +117,8 @@ static int CompareVariableIndices(const void* a, const void* b);
 static void DeletePerInterpData(PerInterpData*);
 static int BddSystemConstructor(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
+static int BddSystemAppquantMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				   int, Tcl_Obj* const[]);
 static int BddSystemBeadindexMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				    int, Tcl_Obj* const[]);
 static int BddSystemBinopMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -117,6 +135,8 @@ static int ForeachSatPre(Tcl_Interp* interp, BddSystemData*,
 			 Tcl_Obj* varName, Tcl_Obj* script,
 			 BDD_AllSatState* stateVector);
 static int ForeachSatPost(ClientData data[4], Tcl_Interp*, int);
+static int BddSystemGCMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+			     int, Tcl_Obj *const[]);
 static int BddSystemNegateMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
 static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -162,6 +182,13 @@ const static Tcl_MethodType BddSystemConstructorType = {
     CloneMethod			   /* method clone proc */
 };
 
+const static Tcl_MethodType BddSystemAppquantMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "appquant",			   /* name */
+    BddSystemAppquantMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemBeadindexMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "beadindex",		   /* name */
@@ -201,6 +228,13 @@ const static Tcl_MethodType BddSystemForeachSatMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "foreach_sat",		   /* name */
     BddSystemForeachSatMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
+const static Tcl_MethodType BddSystemGCMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "gc",			   /* name */
+    BddSystemGCMethod,		   /* callProc */
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
@@ -265,7 +299,7 @@ const static Tcl_MethodType BddSystemUnsetMethodType = {
  * Method table for the BDD system object
  */
 
-MethodTableRow systemMethodTable[] = {
+const static MethodTableRow systemMethodTable[] = {
     { "!=",        &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NE },
     { "&",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_AND },
     { "&3",        &BddSystemTernopMethodType,    (ClientData) BDD_TERNOP_AND },
@@ -292,6 +326,7 @@ MethodTableRow systemMethodTable[] = {
       					        (ClientData) BDD_QUANT_FORALL },
     { "foreach_sat",
                    &BddSystemForeachSatMethodType,NULL },
+    { "gc",        &BddSystemGCMethodType,        NULL },
     { "median" ,   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_MEDIAN },
     { "nand",      &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NAND },
     { "nand3",     &BddSystemTernopMethodType,   (ClientData) BDD_TERNOP_NAND },
@@ -308,6 +343,28 @@ MethodTableRow systemMethodTable[] = {
     { "|3",        &BddSystemTernopMethodType,    (ClientData) BDD_TERNOP_OR },
     { "~",         &BddSystemNegateMethodType,    NULL },
     { NULL,	   NULL,                          NULL }
+};
+
+const static QuantifierTableRow QuantifierTable[] = {
+    {  "exists", BDD_QUANT_EXISTS  },
+    {  "forall", BDD_QUANT_FORALL  },
+    /* "unique", BDD_QUANT_UNIQUE */
+    {  NULL,     0                 }
+};
+
+const static BinOpTableRow BinOpTable[] = {
+    { "!=",   BDD_BINOP_NE   },
+    { "&",    BDD_BINOP_AND  },
+    { "<",    BDD_BINOP_LT   },
+    { "<=",   BDD_BINOP_LE   },
+    { "==",   BDD_BINOP_EQ   },
+    { ">",    BDD_BINOP_GT   },
+    { ">=",   BDD_BINOP_GE   },
+    { "^",    BDD_BINOP_XOR  },
+    { "nand", BDD_BINOP_NAND },
+    { "nor",  BDD_BINOP_NOR  },
+    { "|",    BDD_BINOP_OR   },
+    { NULL,   0              }
 };
 
 /*
@@ -336,7 +393,12 @@ Tclbdd_Init(Tcl_Interp* interp)
 				   initialized */
     Tcl_Class curClass;		/* Tcl_Class representing a class being
 				   initialized */
-    MethodTableRow* methodPtr;	/* Current row in the method table */
+    const MethodTableRow* methodPtr;
+				/* Current row in the method table */
+    const QuantifierTableRow* quantPtr;
+				/* Current row in the quantifier table */
+    const BinOpTableRow* opPtr;	/* Current row in the operator table */
+    Tcl_Obj* nameObj;		/* Name of an "apply-and-quantify" method */
     int i;
 
     if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL) {
@@ -388,6 +450,19 @@ Tclbdd_Init(Tcl_Interp* interp)
 	Tcl_NewMethod(interp, curClass, Tcl_NewStringObj(methodPtr->name, -1),
 		      1, methodPtr->type, methodPtr->clientData);
     }
+    for (quantPtr = QuantifierTable; quantPtr->name != NULL; ++quantPtr) {
+	for (opPtr = BinOpTable; opPtr->name != NULL; ++opPtr) {
+	    nameObj = Tcl_NewStringObj(quantPtr->name, -1);
+	    Tcl_AppendToObj(nameObj, "_", -1);
+	    Tcl_AppendToObj(nameObj, opPtr->name, -1);
+	    Tcl_IncrRefCount(nameObj);
+	    Tcl_NewMethod(interp, curClass, nameObj, 1,
+			  &BddSystemAppquantMethodType,
+			  (ClientData) (size_t) ((quantPtr->quant<<4)
+						 | (opPtr->op)));
+	}
+    }
+
     /* Provide the package */
 
     if (Tcl_PkgProvideEx(interp, PACKAGE_NAME, PACKAGE_VERSION,
@@ -527,6 +602,110 @@ BddSystemBeadindexMethod(
 	return TCL_ERROR;
     }
     Tcl_SetObjResult(interp, Tcl_NewWideIntObj(beadIndex));
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemAppquantMethod --
+ *
+ *	Applies a binary operation to a pair of BDD's, then applies a
+ *	quantification over a set of variables to the result.
+ *
+ * Usage:
+ *	$system ${quant}_${op} $result $vars $expr1 $expr2
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	quant  - 'exists' or 'forall' according to which quantification
+ *               is desired
+ *	op     - One of the binary operators !=, &, <, <=, ==, >. >=,
+ *               ^, nand, nor, and |
+ *      result - Name to be assigned to the resulting BDD.
+ *	vars   - List of names of variables to quantify over
+ *	expr1  - Left operand
+ *	expr2  - Rught operand
+ */
+
+static int
+BddSystemAppquantMethod(
+    ClientData clientData,	/* unused */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    BDD_Quantifier q = (BDD_Quantifier) ((size_t)clientData >> 4);
+				/* The quantifier to apply */
+    BDD_BinOp op = (BDD_BinOp) ((size_t) clientData & 0xF);
+				/* The operation to apply */
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex u1;		/* The left operand */
+    BDD_BeadIndex u2;		/* The right operand */
+    int varc;			/* Count of supplied variable names */
+    Tcl_Obj** varv;		/* List of variable names supplied */
+    BDD_VariableIndex* v;	/* Variables to quantify */
+    BDD_BeadIndex literalIndex;	/* Index of the current variable as a BDD */
+    BDD_ValueAssignment a;	/* Current quantified variable */
+    Tcl_Obj* errorMessage;	/* Error message for a failed execution */
+    BDD_BeadIndex result;	/* Result of the operation */
+    BDD_VariableIndex i;
+
+    /* Check syntax */
+
+    if (objc != skipped+4) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name vars expr");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+2],
+			    &u1) != TCL_OK
+	|| FindNamedExpression(interp, sdata, objv[skipped+3],
+			       &u2) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    if (Tcl_ListObjGetElements(interp, objv[skipped+1],
+			       &varc, &varv) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    v = ckalloc(varc * sizeof(BDD_VariableIndex));
+    for (i = 0; i < varc; ++i) {
+	if (FindNamedExpression(interp, sdata, varv[i],
+				&literalIndex) != TCL_OK) {
+	    ckfree(v);
+	    return TCL_ERROR;
+	}
+	if (!BDD_Literal(sdata->system, literalIndex, &a)
+	    || (a.value == 0)) {
+	    errorMessage = Tcl_ObjPrintf("%s is not a variable",
+					 Tcl_GetString(varv[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NotVariable",
+			     Tcl_GetString(varv[i]), NULL);
+	    ckfree(v);
+	    return TCL_ERROR;
+	}	    
+	v[i] = a.var;
+    }
+
+    /*
+     * Order the literals
+     */
+    qsort(v, varc, sizeof(BDD_VariableIndex), CompareVariableIndices);
+
+    /*
+     * Do the combined operation and quantification
+     */
+    result = BDD_ApplyAndQuantify(sdata->system, q, varc, v, op, u1, u2);
+    ckfree(v);
+    SetNamedExpression(sdata, objv[skipped], result);
+    BDD_UnrefBead(sdata->system, result);
     return TCL_OK;
 }
 
@@ -1065,6 +1244,53 @@ ForeachSatPost(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BddSystemGCMethod --
+ *
+ *	Asks the BDD engine to perform a garbage collection.
+ *
+ * Usage:
+ *	$system gc
+ *
+ * Parameters:
+ *	system - System of BDD's.
+ *
+ * Results:
+ *	Returns the number of allocated beads after the garbage collection.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemGCMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex beadCount;	/* Number of allocated beads after GC */
+    
+    if (objc != skipped) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "");
+	return TCL_ERROR;
+    }
+
+    beadCount = BDD_GarbageCollect(sdata->system);
+
+    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(beadCount));
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BddSystemNegateMethod --
  *
  *	Computes the negation of a named expression in a system of
@@ -1561,7 +1787,7 @@ BddSystemTernopMethod(
  *
  * BddSystemUnsetMethod --
  *
- *	Forgets a named expression
+ *	Forgets a set of named expressions
  *
  * Usage:
  *	$system unset name
@@ -1591,14 +1817,11 @@ BddSystemUnsetMethod(
 				/* The current system of expressions */
     int skipped = Tcl_ObjectContextSkippedArgs(ctx);
 				/* The number of args used in method dispatch */
-
-    /* Check syntax */
-
-    if (objc != skipped+1) {
-	Tcl_WrongNumArgs(interp, skipped, objv, "name");
-	return TCL_ERROR;
+    int i;
+    
+    for (i = skipped; i < objc; ++i) {
+	UnsetNamedExpression(NULL, sdata, objv[i]);
     }
-    UnsetNamedExpression(interp, sdata, objv[skipped]);
     return TCL_OK;
 }
 

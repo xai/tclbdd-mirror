@@ -785,6 +785,66 @@ AddBead(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_GarbageCollect --
+ *
+ *	Garbage collects the unused beads in the system.
+ *
+ * Results:
+ *	Returns the count of allocated beads after garbage collection.
+ *
+ * This function ordinarily should not be called. Free beads are
+ * garbage-collected incrementally. Freed beads also remain in the
+ * cache from BDD_MakeBead and can be recycled without new memory
+ * allocation if new beads with the same attributes are requested.
+ * This function is primarily provided for testing the library to
+ * ensure that the operations remain free of memory leaks.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+BDD_BeadIndex
+BDD_GarbageCollect(
+    BDD_System* sysPtr)		/* System of BDD's */
+{
+    BDD_BeadIndex garbage = 0;
+    Bead* beads = sysPtr->beads;
+    BDD_BeadIndex bead;
+    BDD_BeadIndex count = sysPtr->beadsAlloc;
+
+    /* 
+     * Allocate beads until no free beads remain. This will force any
+     * weakly referenced beads to be recycled.
+     */
+    while (sysPtr->unusedBead != 0) {
+	bead = AddBead(sysPtr, ~(BDD_VariableIndex)0, (BDD_BeadIndex)0, 
+		       (BDD_BeadIndex)0);
+	sysPtr->beads[bead].next = garbage;
+	garbage = bead;
+    }
+
+    /* 
+     * Free the beads again, counting them. Any beads not counted are
+     * "in use".
+     */
+    while (garbage != 0) {
+	bead = garbage;
+	garbage = sysPtr->beads[bead].next;
+	if (sysPtr->unusedBead == 0) {
+	    beads[bead].next = 0;
+	} else {
+	    beads[bead].next = beads[sysPtr->unusedBead].next;
+	    beads[sysPtr->unusedBead].next = bead;
+	}
+	sysPtr->unusedBead = bead;
+	--count;
+    }
+
+    return count;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_MakeBead --
  *
  *	Searches for a bead in the hash table and constructs one if it is
@@ -883,6 +943,9 @@ BDD_UnrefBead(
 
     if (bead <= 1) return;
 
+    if (beads[bead].refCount == 0) {
+	Tcl_Panic("unref free bead!");
+    }
     if (--(beads[bead].refCount) == 0) {
 
 	/* Remove the bead from the hash table */
@@ -1838,11 +1901,13 @@ ApplyAndQuantify(
 		 * Recurse into the subexpressions, and recombine with
 		 * a simple IF-THEN_ELSE
 		 */
+
 		l = ApplyAndQuantify(sysPtr, n, v, low1, low2);
 		h = ApplyAndQuantify(sysPtr, n, v, high1, high2);
 		result = BDD_MakeBead(sysPtr, level, l, h);
 		BDD_UnrefBead(sysPtr, l);
 		BDD_UnrefBead(sysPtr, h);
+		break;
 		
 	    } else if (level == *v) {
 		/*
@@ -1856,6 +1921,7 @@ ApplyAndQuantify(
 		result = Apply(sysPtr, l, h);
 		BDD_UnrefBead(sysPtr, l);
 		BDD_UnrefBead(sysPtr, h);
+		break;
 		
 	    } else {
 		/*
@@ -1939,7 +2005,7 @@ BDD_ApplyAndQuantify(
  * compose(x1&x2&x3, (x1->x2,x2->x3,x3->x1)) == (x2&x3&x1)
  * compose(x1&x2&x3, x1->x2) == x2&x2&x3 == x2&x3
  * compose(x2&x3, x2->x3) == x3&x3 == x3
-x * compose(x3, x3->x1) == x1
+ * compose(x3, x3->x1) == x1
  *
  * If all the variables need to be replaced with constants, then Restrict
  * is much faster than Compose at generating the replaced BDD.

@@ -131,6 +131,7 @@ extern BDDAPI BDD_BeadIndex BDD_MakeBead(BDD_System* sysPtr,
 extern BDDAPI void BDD_IncrBeadRefCount(BDD_System* sysPtr, 
 					BDD_BeadIndex bead);
 extern BDDAPI void BDD_UnrefBead(BDD_System* sysPtr, BDD_BeadIndex bead);
+extern BDDAPI BDD_BeadIndex BDD_GarbageCollect(BDD_System* sysPtr);
 extern BDDAPI BDD_BeadIndex BDD_NthVariable(BDD_System* sysPtr,
 					    BDD_VariableIndex n);
 extern BDDAPI BDD_BeadIndex BDD_NotNthVariable(BDD_System* sysPtr,
