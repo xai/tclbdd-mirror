@@ -72,6 +72,8 @@ struct BDD_System {
 				/* Cache of partial results for BDD_Restrict */
     Tcl_HashTable satCountCache;
 				/* Cache of partial results for BDD_SatCount */
+    Tcl_HashTable simplifyCache;
+				/* Cache of partial results for BDD_Simplify */
 };
 
 /*

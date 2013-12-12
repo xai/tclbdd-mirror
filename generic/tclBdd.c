@@ -151,6 +151,8 @@ static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemSatcountMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
+static int BddSystemSimplifyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				   int, Tcl_Obj* const[]);
 static int BddSystemTernopMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
 static int BddSystemUnsetMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -289,6 +291,13 @@ const static Tcl_MethodType BddSystemSatcountMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemSimplifyMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "binop",			   /* name */
+    BddSystemSimplifyMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};				   /* common to all ten binary operators */
 const static Tcl_MethodType BddSystemTernopMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "ternop",			   /* name */
@@ -347,6 +356,7 @@ const static MethodTableRow systemMethodTable[] = {
     { "profile",   &BddSystemProfileMethodType,   NULL },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
+    { "simplify",  &BddSystemSimplifyMethodType,  NULL },
     { "twoof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_TWOOF },
     { "unset",     &BddSystemUnsetMethodType,     NULL },
     { "|",         &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_OR },
@@ -1794,6 +1804,71 @@ BddSystemSatcountMethod(
     BDD_SatCount(sdata->system, beadIndex, &satCount);
     Tcl_SetObjResult(interp, Tcl_NewBignumObj(&satCount));
 
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemSimplifyMethod --
+ *
+ *	Simplifies a BDD with a respect to a domain. (Coudert and Madre's
+ *	Restrict function).
+ *
+ * Usage:
+ *	$system simplify a f domain
+ *
+ * Parameters:
+ *	OP - One of the binary operators nor, <, >, !=, ^, nand, &,
+ *           ==, <=, >=, |
+ *	a - Name of the result expression
+ *	f - Name of the expression to simplify
+ *	domain - Name of the expression describing the domain of interest
+ *
+ * Results:
+ *	None
+ *
+ * Side effects:
+ *	Assigns the given name to the result expression
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemSimplifyMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex beadIndexOpd1; /* The bead index of the first operand */
+    BDD_BeadIndex beadIndexOpd2; /* The bead index of the second operand */
+    BDD_BeadIndex beadIndexResult; /* The bead index of the result */
+
+    /* Check syntax */
+
+    if (objc != skipped+3) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "result function domain");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+1],
+			    &beadIndexOpd1) != TCL_OK
+	|| FindNamedExpression(interp, sdata, objv[skipped+2],
+			       &beadIndexOpd2) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    beadIndexResult = BDD_Simplify(sdata->system, beadIndexOpd1,
+				   beadIndexOpd2);
+    SetNamedExpression(sdata, objv[skipped], beadIndexResult);
+    BDD_UnrefBead(sdata->system, beadIndexResult);
     return TCL_OK;
 }
 

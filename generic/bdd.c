@@ -1991,6 +1991,170 @@ BDD_ApplyAndQuantify(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BDD_Simplify --
+ *
+ *	Simplify a BDD with respect to a domain.
+ *
+ * Results:
+ *	Returns the simplified BDD.
+ *
+ * This function is the 'Restrict' function of Coudert and Madre.
+ * It works by pruning paths of the BDD outside the given domain.
+ * It is guaranteed never to increase the size of the BDD.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static BDD_BeadIndex
+Simplify(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex f,		/* BDD to simplify */
+    BDD_BeadIndex domain)	/* Domain outside which values are
+				 * irrelevant. */
+{
+    BDD_BeadIndex u[2];		/* Hash key */
+    Tcl_HashEntry* entry;	/* Hash entry in the cache
+				 * of partial results */
+    int isNew;			/* Flag == 1 if the entry was created */
+    BDD_BeadIndex result = ~(BDD_BeadIndex) 0;
+				/* Simplified BDD */
+    Bead* fPtr = sysPtr->beads + f;
+    Bead* dPtr = sysPtr->beads + domain;
+    BDD_VariableIndex fLevel = fPtr->level;
+    BDD_VariableIndex dLevel = dPtr->level;
+    BDD_BeadIndex low, high, temp;
+
+    /*
+     * Handle the trivial cases without resorting to the cache
+     */
+    if (domain == 1 || f <= 1) {
+	++sysPtr->beads[f].refCount;
+	return f;
+    }
+    if (domain == f) {
+	++sysPtr->beads[1].refCount;
+	return 1;
+    }
+    if (domain == 0) {
+	++sysPtr->beads[0].refCount;
+	return 0;
+    }
+
+    /*
+     * Search the cache
+     */
+    u[0] = f;
+    u[1] = domain;
+    entry = Tcl_CreateHashEntry(&(sysPtr->simplifyCache), u, &isNew);
+    if (!isNew) {
+	result = (BDD_BeadIndex)Tcl_GetHashValue(entry);
+	++sysPtr->beads[result].refCount;
+	return result;
+    }
+
+    /*
+     * Simplify when a common variable appears in domain and function
+     */
+    if (fLevel == dLevel) {
+	/*
+	 * Trim zero branches in the domain
+	 */
+	if (dPtr->low == 0) {
+	    /* 
+	     * The common variable has all zeroes in the low branch.
+	     * Cast out the low branch and simplify the high.
+	     */
+	    result = Simplify(sysPtr, fPtr->high, dPtr->high);
+	} else if (dPtr->high == 0) {
+	    /*
+	     * The common variable has all zeroes in the high branch.
+	     * Cast out the high branch and simplify the low.
+	     */
+	    result = Simplify(sysPtr, fPtr->low, dPtr->low);
+	} else {
+	    /*
+	     * The common variable has live branches in both
+	     * directions. Simplify the high and low branches
+	     * separately and conjoin them.
+	     */
+	    low = Simplify(sysPtr, fPtr->low, dPtr->low);
+	    high = Simplify(sysPtr, fPtr->high, dPtr->high);
+	    result = BDD_MakeBead(sysPtr, fLevel, low, high);
+	    BDD_UnrefBead(sysPtr, low);
+	    BDD_UnrefBead(sysPtr, high);
+	}
+    } else if (fLevel < dLevel) {
+	/*
+	 * The first variable in f is not constrained by the domain.
+	 * Simplify its low and high branches, and make a bead testing
+	 * the variable of f.
+	 */
+	low = Simplify(sysPtr, fPtr->low, domain);
+	high = Simplify(sysPtr, fPtr->high, domain);
+	result = BDD_MakeBead(sysPtr, fLevel, low, high);
+	BDD_UnrefBead(sysPtr, low);
+	BDD_UnrefBead(sysPtr, high);
+    } else /* fLevel > dLevel */ {
+	/* 
+	 * The first variable in domain does not appear in
+	 * f. Existentially quantify it away from domain, and simplify
+	 * with respect to the broader domain
+	 */
+	/* sysPtr->applyOp = BDD_BINOP_OR; */
+	temp = Apply(sysPtr, dPtr->low, dPtr->high);
+	result = Simplify(sysPtr, f, temp);
+	BDD_UnrefBead(sysPtr, temp);
+    }
+    ++sysPtr->beads[result].refCount;
+    Tcl_SetHashValue(entry, (ClientData) result);
+    return result;
+}
+BDD_BeadIndex
+BDD_Simplify(
+    BDD_System* sysPtr,		/* System of BDD's */
+    BDD_BeadIndex f,		/* Function to simplify */
+    BDD_BeadIndex domain)	/* Domain of interest */
+{
+    Tcl_HashSearch search;	/* Search for clearing the cache */
+    Tcl_HashEntry* entryPtr;	/* Hash entyr for clearing the cache */
+    BDD_BeadIndex result;	/* Return value */
+
+    /*
+     * Initialize caches of partial results
+     */
+    Tcl_InitCustomHashTable(&(sysPtr->applyCache),
+			    TCL_CUSTOM_TYPE_KEYS, &Bead3KeyType);
+    sysPtr->applyOp = BDD_BINOP_OR;
+    Tcl_InitCustomHashTable(&(sysPtr->simplifyCache),
+			    TCL_CUSTOM_TYPE_KEYS, &Bead2KeyType);
+
+    /*
+     * Compute the result
+     */
+    result = Simplify(sysPtr, f, domain);
+
+    /*
+     * Clear the caches
+     */
+    for (entryPtr = Tcl_FirstHashEntry(&(sysPtr->applyCache), &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&(sysPtr->applyCache));
+    for (entryPtr = Tcl_FirstHashEntry(&(sysPtr->simplifyCache), &search);
+	 entryPtr != NULL;
+	 entryPtr = Tcl_NextHashEntry(&search)) {
+	BDD_UnrefBead(sysPtr, (BDD_BeadIndex)Tcl_GetHashValue(entryPtr));
+    }
+    Tcl_DeleteHashTable(&(sysPtr->simplifyCache));
+
+    return result;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BDD_Compose --
  *
  *	Computes a BDD representing an input BDD with a selection of variables

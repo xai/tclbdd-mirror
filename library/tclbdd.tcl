@@ -27,7 +27,19 @@ oo::class create bdd::system {
     method tautology {exprName} {
 	expr {[my beadindex $exprname] == 1}
     }
-
+    method support {exprName} {
+	set i 0
+	set result {}
+	foreach k [my profile $exprName] {
+	    if {$k != 0} {
+		lappend result $i
+	    }
+	    incr i
+	}
+    }
+    method beadcount {exprName} {
+	tcl::mathop::+ [my profile $exprName]
+    }
 }
 
 proc bdd::Lexer {script} {
@@ -50,7 +62,6 @@ proc bdd::Lexer {script} {
 	   | =
 	   | \?
 	   | :
-	   | nor
 	   | <
 	   | <=
 	   | ==

@@ -153,6 +153,8 @@ extern BDDAPI BDD_BeadIndex BDD_Quantify(BDD_System* sysPtr,
 					 BDD_VariableIndex n,
 					 const BDD_VariableIndex v[],
 					 BDD_BeadIndex u);
+extern BDDAPI BDD_BeadIndex BDD_Simplify(BDD_System* sysPtr, BDD_BeadIndex f,
+					 BDD_BeadIndex domain);
 extern BDDAPI BDD_BeadIndex BDD_Compose(BDD_System* sysPtr,
 					BDD_BeadIndex u,
 					BDD_VariableIndex nVars,
