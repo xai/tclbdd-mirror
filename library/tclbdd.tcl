@@ -38,7 +38,7 @@ oo::class create bdd::system {
 	}
     }
     method beadcount {exprName} {
-	tcl::mathop::+ [my profile $exprName]
+	tcl::mathop::+ {*}[my profile $exprName]
     }
 }
 

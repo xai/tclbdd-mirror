@@ -14,6 +14,7 @@
 #include <tcl.h>
 #include <tclOO.h>
 #include <tclTomMath.h>
+#include <limits.h>
 
 #include "tclBddInt.h"
 
@@ -137,6 +138,8 @@ static int ForeachSatPre(Tcl_Interp* interp, BddSystemData*,
 static int ForeachSatPost(ClientData data[4], Tcl_Interp*, int);
 static int BddSystemGCMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 			     int, Tcl_Obj *const[]);
+static int BddSystemLoadMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+			       int, Tcl_Obj* const[]);
 static int BddSystemNegateMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
 static int BddSystemNotnthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -239,6 +242,13 @@ const static Tcl_MethodType BddSystemGCMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "gc",			   /* name */
     BddSystemGCMethod,		   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
+const static Tcl_MethodType BddSystemLoadMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "load",			   /* name */
+    BddSystemLoadMethod,	   /* callProc */
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
@@ -345,6 +355,7 @@ const static MethodTableRow systemMethodTable[] = {
     { "foreach_sat",
                    &BddSystemForeachSatMethodType,NULL },
     { "gc",        &BddSystemGCMethodType,        NULL },
+    { "load",      &BddSystemLoadMethodType,      NULL },
     { "median" ,   &BddSystemTernopMethodType, (ClientData) BDD_TERNOP_MEDIAN },
     { "nand",      &BddSystemBinopMethodType,     (ClientData) BDD_BINOP_NAND },
     { "nand3",     &BddSystemTernopMethodType,   (ClientData) BDD_TERNOP_NAND },
@@ -1306,6 +1317,214 @@ BddSystemGCMethod(
 
     Tcl_SetObjResult(interp, Tcl_NewWideIntObj(beadCount));
     return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BDDSystemLoadMethod --
+ *
+ *	OR's a minterm representing a tuple in a finite domain into a
+ *	BDD representing a relation.
+ *
+ * Usage:
+ *	$system load relation description value ?value ...?
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	relation - Name of the BDD representing the relation. The BDD
+ *	           need not yet exist; if it does not, it will be initially
+ *		   created as the constant 0.
+ *	description - List describing the mapping of bits in the values to
+ *		      variables in the BDD.
+ *	value... - Integer values in the finite domain of the columns of
+ *		   the relation.
+ *
+ * Results:
+ *	Returns a standard Tcl result, empty on success or with an
+ *	error message on failure.
+ *
+ * Side effects:
+ *	An AND-term is constructed from the bit values and the term is OR-ed
+ *	into the relation under construction.
+ *
+ * The description is a list whose length is a multiple of three.
+ * Element 3*n is the level number of a variable in the BDD. Element
+ * 3*n+1 is the index of a value within the 'value' parameters to this
+ * method. Element 3*n+2 is the bit position (0 -> 1, 1 -> 2, 2 -> 4, 4-> 8
+ * and so on) of the bit in the value that gives the value of the variable.
+ * The variables MUST be listed in increasing order.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemLoadMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    Tcl_Obj* name;		/* Name of the named relation */
+    int paramc = objc-skipped-2;
+				/* Number of supplied parameters */
+    Tcl_WideInt* paramv;	/* Vector of integer parameters */
+    int descc;			/* Count of elements in the description list */
+    Tcl_Obj** descv;		/* Description list */
+    int i;
+    BDD_BeadIndex minterm;	/* Minterm under construction */
+    BDD_BeadIndex relation;	/* Relation under construction */
+    BDD_BeadIndex temp;
+    int lastVarIndex = INT_MAX;	/* Variable index from the last trip */
+    int varIndex;		/* Variable index */
+    int paramIndex;		/* Parameter index */
+    int bitPos;			/* Bit position within the value */
+    Tcl_HashEntry* entryPtr;	/* Hash entry holding the named relation */
+    int newFlag;		/* Flag == 1 if the relation is newly created */
+
+    /*
+     * check param count
+     */
+    if (objc < skipped+2) {
+	Tcl_WrongNumArgs(interp, skipped, objv, 
+			 "relation description ?value...?");
+	return TCL_ERROR;
+    }
+    name = objv[skipped];
+
+    /*
+     * Get parameter values
+     */
+    fprintf(stderr, "loading %s: parse param values\n", Tcl_GetString(name));
+    paramv = ckalloc(paramc * sizeof(Tcl_WideInt));
+    for (i = 0; i < paramc; ++i) {
+	fprintf(stderr, "        %s: param %d\n", Tcl_GetString(name), i);
+	if (Tcl_GetWideIntFromObj(interp, objv[skipped+2+i],
+				  paramv+i) != TCL_OK) {
+	    ckfree(paramv);
+	    return TCL_ERROR;
+	}
+	fprintf(stderr, "        %s: value = %ld\n",
+		Tcl_GetString(name), paramv[i]);
+    }
+
+    /*
+     * Unpack description
+     */
+    if (Tcl_ListObjGetElements(interp, objv[skipped+1],
+			       &descc, &descv) != TCL_OK) {
+	ckfree(paramv);
+	return TCL_ERROR;
+    }
+    fprintf(stderr, "loading %s: %d elements in description vector\n",
+	    Tcl_GetString(name), descc);
+    if (descc % 3 != 0) {
+	Tcl_SetObjResult(interp, Tcl_NewStringObj("description list must have "
+						  "a multiple of 3 "
+						  "elements", -1));
+	Tcl_SetErrorCode(interp, "BDD DescNotMultipleOf3", NULL);
+	ckfree(paramv);
+	return TCL_ERROR;
+    }
+
+    /*
+     * Convert the given integer values to a minterm
+     */
+    minterm = 1;
+    BDD_IncrBeadRefCount(sdata->system, minterm);
+    for (i = descc; i > 0; ) {
+	i -= 3;
+	/*
+	 * Unpack the description for the current bit
+	 */
+	if (Tcl_GetIntFromObj(interp, descv[i], &varIndex) != TCL_OK
+	    || Tcl_GetIntFromObj(interp, descv[i+1], &paramIndex) != TCL_OK
+	    || Tcl_GetIntFromObj(interp, descv[i+2], &bitPos) != TCL_OK) {
+	    BDD_UnrefBead(sdata->system, minterm);
+	    ckfree(paramv);
+	    return TCL_ERROR;
+	}
+	fprintf(stderr, "loading %s: var=%d param=%d (bit %d)\n",
+		Tcl_GetString(name), varIndex, paramIndex, bitPos);
+	if (varIndex >= lastVarIndex) {
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj("variables are not in "
+						      "increasing order", -1));
+	    Tcl_SetErrorCode(interp, "BDD", "VarsOutOfOrder", NULL);
+	    BDD_UnrefBead(sdata->system, minterm);
+	    ckfree(paramv);
+	    return TCL_ERROR;
+	}
+	if (paramIndex >= paramc || paramIndex < 0) {
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj("description refers to a "
+						      "nonexistent "
+						      "parameter", -1));
+	    Tcl_SetErrorCode(interp, "BDD", "NonexistentParam", NULL);
+	    BDD_UnrefBead(sdata->system, minterm);
+	    ckfree(paramv);
+	    return TCL_ERROR;
+	}
+	if (bitPos >= CHAR_BIT * sizeof(Tcl_WideInt) || bitPos < 0) {
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj("bad bit index in "
+						      "description", -1));
+	    Tcl_SetErrorCode(interp, "BDD", "BadBitIndex", NULL);
+	    BDD_UnrefBead(sdata->system, minterm);
+	    ckfree(paramv);
+	    return TCL_ERROR;
+	}
+
+	/*
+	 * Make a literal for the current bit and AND it with the minterm
+	 * under construction.
+	 */
+	if ((paramv[paramIndex] >> bitPos) & 1) {
+	    fprintf(stderr, "        %s: make bead (%u, %lu, %lu)\n",
+		    Tcl_GetString(name),
+		    (BDD_VariableIndex) varIndex, (BDD_BeadIndex) 0, minterm);
+	    temp = BDD_MakeBead(sdata->system, (BDD_VariableIndex) varIndex,
+				(BDD_BeadIndex) 0, minterm);
+	} else {
+	    fprintf(stderr, "        %s: make bead (%u, %lu, %lu)\n",
+		    Tcl_GetString(name),
+		    (BDD_VariableIndex) varIndex, minterm, (BDD_BeadIndex) 0);
+	    temp = BDD_MakeBead(sdata->system, (BDD_VariableIndex) varIndex,
+				minterm, 0);
+	}
+	BDD_UnrefBead(sdata->system, minterm);
+	minterm = temp;
+    }
+    ckfree(paramv);
+
+    /*
+     * OR the minterm into the named relation, creating the empty
+     * relation if necessary.
+     */
+    entryPtr = Tcl_CreateHashEntry(sdata->expressions, name, &newFlag);
+    if (newFlag) {
+	fprintf(stderr, "start a new (empty) relation %s\n",
+		Tcl_GetString(name));
+	relation = 0;
+	BDD_IncrBeadRefCount(sdata->system, relation);
+    } else {
+	relation = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
+    }
+    temp = relation;
+    fprintf(stderr, "OR the minterm into %s\n", Tcl_GetString(name));
+    relation = BDD_Apply(sdata->system, BDD_BINOP_OR, relation, minterm);
+    BDD_UnrefBead(sdata->system, temp);
+    BDD_UnrefBead(sdata->system, minterm);
+    Tcl_SetHashValue(entryPtr, relation);
+    fprintf(stderr, "Done loading a row of %s\n", Tcl_GetString(name));
+
+    return TCL_OK;
+    
 }
 
 /*
