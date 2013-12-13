@@ -1,0 +1,204 @@
+# bdd.test --
+#
+#       Tests for Finite Domain Decision Diagrams (FDDD's)
+#
+# Copyright (c) 2013 by Kevin B. Kenny.
+
+package require tclbdd
+
+test fddd-1.1 {load minterm - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys load
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test fddd-1.2 {load minterm - bad integer} {*}{
+    -setup {
+	bdd::system create sys
+    } 
+    -body {
+	sys load x {} garbage
+    } 
+    -cleanup {
+	rename sys {}
+    }
+    -result {expected integer but got "garbage"}
+    -returnCodes error
+}
+
+test fddd-1.3 {load minterm - ill-formed list} {
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys load x \{ 
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {unmatched open brace in list}
+    -returnCodes error
+}
+
+test fddd-1.4 {load minterm - wrong list size} {
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys load x {1 2}} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {1 {description list must have a multiple of 3 elements} {BDD DescNotMultipleOf3}}
+}
+
+test fddd-1.5 {load - bad integer - also check bead leak} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {garbage 0 0 1 0 1} 0} result] \
+	    $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test fddd-1.6 {load - bad integer - also check bead leak} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 garbage 0 1 0 1} 0} result] \
+	    $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test fddd-1.7 {load - bad integer - also check bead leak} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 0 garbage 1 0 1} 0} result] \
+	    $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test fddd-1.8 {load - nonincreasing var indices} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {1 0 0 1 0 1} 0} result] \
+	    $result \
+	    $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {variables are not in increasing order} {BDD VarsOutOfOrder} 2}
+}
+
+test fddd-1.9 {load - nonexistent param} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 1 0 1 0 1} 0} result] \
+	    $result \
+	    $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {description refers to a nonexistent parameter} {BDD NonexistentParam} 2}
+}
+
+test fddd-1.10 {load - bad bit index} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 0 65 1 0 1} 0} result] \
+	    $result \
+	    $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {bad bit index in description} {BDD BadBitIndex} 2}
+}
+
+test fddd-1.11 {load - do nothing gracefully} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys load x {}
+	list [sys beadindex x] [sys unset x] [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {} 2}
+}
+
+test fdd-1.13 {load multiple minterms} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	set result {}
+	for {set i 0} {$i < 3} {incr i} {
+	    set j [expr {($i + 1) % 4}]
+	    sys load x {0 0 0 3 1 1 5 1 0 7 0 1} $i $j
+	}
+	sys foreach_sat s x {
+	    lappend result $s
+	}
+	sys unset x
+	lappend result [sys gc]
+	set result
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {{0 0 3 0 5 1 7 0} {0 0 3 1 5 1 7 1} {0 1 3 1 5 0 7 0} 2}
+}
+
+# Local Variables:
+# mode: tcl
+# c-basic-offset: 4
+# End:

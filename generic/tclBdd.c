@@ -1403,17 +1403,13 @@ BddSystemLoadMethod(
     /*
      * Get parameter values
      */
-    fprintf(stderr, "loading %s: parse param values\n", Tcl_GetString(name));
     paramv = ckalloc(paramc * sizeof(Tcl_WideInt));
     for (i = 0; i < paramc; ++i) {
-	fprintf(stderr, "        %s: param %d\n", Tcl_GetString(name), i);
 	if (Tcl_GetWideIntFromObj(interp, objv[skipped+2+i],
 				  paramv+i) != TCL_OK) {
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
-	fprintf(stderr, "        %s: value = %ld\n",
-		Tcl_GetString(name), paramv[i]);
     }
 
     /*
@@ -1424,13 +1420,11 @@ BddSystemLoadMethod(
 	ckfree(paramv);
 	return TCL_ERROR;
     }
-    fprintf(stderr, "loading %s: %d elements in description vector\n",
-	    Tcl_GetString(name), descc);
     if (descc % 3 != 0) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj("description list must have "
 						  "a multiple of 3 "
 						  "elements", -1));
-	Tcl_SetErrorCode(interp, "BDD DescNotMultipleOf3", NULL);
+	Tcl_SetErrorCode(interp, "BDD", "DescNotMultipleOf3", NULL);
 	ckfree(paramv);
 	return TCL_ERROR;
     }
@@ -1452,9 +1446,7 @@ BddSystemLoadMethod(
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
-	fprintf(stderr, "loading %s: var=%d param=%d (bit %d)\n",
-		Tcl_GetString(name), varIndex, paramIndex, bitPos);
-	if (varIndex >= lastVarIndex) {
+	if (varIndex >= lastVarIndex || varIndex < 0) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("variables are not in "
 						      "increasing order", -1));
 	    Tcl_SetErrorCode(interp, "BDD", "VarsOutOfOrder", NULL);
@@ -1462,6 +1454,7 @@ BddSystemLoadMethod(
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
+	lastVarIndex = varIndex;
 	if (paramIndex >= paramc || paramIndex < 0) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("description refers to a "
 						      "nonexistent "
@@ -1485,15 +1478,9 @@ BddSystemLoadMethod(
 	 * under construction.
 	 */
 	if ((paramv[paramIndex] >> bitPos) & 1) {
-	    fprintf(stderr, "        %s: make bead (%u, %lu, %lu)\n",
-		    Tcl_GetString(name),
-		    (BDD_VariableIndex) varIndex, (BDD_BeadIndex) 0, minterm);
 	    temp = BDD_MakeBead(sdata->system, (BDD_VariableIndex) varIndex,
 				(BDD_BeadIndex) 0, minterm);
 	} else {
-	    fprintf(stderr, "        %s: make bead (%u, %lu, %lu)\n",
-		    Tcl_GetString(name),
-		    (BDD_VariableIndex) varIndex, minterm, (BDD_BeadIndex) 0);
 	    temp = BDD_MakeBead(sdata->system, (BDD_VariableIndex) varIndex,
 				minterm, 0);
 	}
@@ -1508,20 +1495,16 @@ BddSystemLoadMethod(
      */
     entryPtr = Tcl_CreateHashEntry(sdata->expressions, name, &newFlag);
     if (newFlag) {
-	fprintf(stderr, "start a new (empty) relation %s\n",
-		Tcl_GetString(name));
 	relation = 0;
 	BDD_IncrBeadRefCount(sdata->system, relation);
     } else {
 	relation = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
     }
     temp = relation;
-    fprintf(stderr, "OR the minterm into %s\n", Tcl_GetString(name));
     relation = BDD_Apply(sdata->system, BDD_BINOP_OR, relation, minterm);
     BDD_UnrefBead(sdata->system, temp);
     BDD_UnrefBead(sdata->system, minterm);
     Tcl_SetHashValue(entryPtr, relation);
-    fprintf(stderr, "Done loading a row of %s\n", Tcl_GetString(name));
 
     return TCL_OK;
     
