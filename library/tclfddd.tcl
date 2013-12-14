@@ -1,6 +1,6 @@
 #package require tclbdd 0.1
 
-namespace eval fdd {
+namespace eval fddd {
     namespace export domain interleave concatenate
 }
 
@@ -22,12 +22,12 @@ namespace eval fdd {
 #
 #-----------------------------------------------------------------------------
 
-# fdd::domain --
+# fddd::domain --
 #
 #	Defines a new finite domain
 #
 # Usage:
-#	fdd::domain name width ?endian?
+#	fddd::domain name width ?endian?
 #
 # Parameters:
 #	name - Name of the domain
@@ -40,7 +40,7 @@ namespace eval fdd {
 # Results:
 #	Returns a domain description.
 
-proc fdd::domain {name width {endian littleendian}} {
+proc fddd::domain {name width {endian littleendian}} {
     switch -exact -- $endian {
 	littleendian {
 	    set l {}
@@ -55,20 +55,20 @@ proc fdd::domain {name width {endian littleendian}} {
 	    }
 	}
 	default {
-	    return -code error -errorcode [list FDD BadEndian $endian] \
+	    return -code error -errorcode [list FDDD BadEndian $endian] \
 		"unknown endian \"$endian\": must be bigendian or littleendian"
 	}
     }
     return [list [dict create $name $width] $l]
 }
 
-# fdd::interleave --
+# fddd::interleave --
 #
 #	Interleaves some number of finite domains so that their bit positions
 #	in a BDD alternate.
 #
 # Usage:
-#	fdd::interleave ?description...?
+#	fddd::interleave ?description...?
 #
 # Parameters:
 #	Zero or more domain descriptions whose bits are to be interleaved.
@@ -78,20 +78,20 @@ proc fdd::domain {name width {endian littleendian}} {
 #	Returns a domain description of the interleaved domains.
 #
 # Errors:
-#	{FDD DuplicateName $name} if any domain is not distinct
+#	{FDDD DuplicateName $name} if any domain is not distinct
 #
 # The domains are interleaved by taking one bit from the first domain,
 # one from the second, and so on. If they are of differing length, then
 # the process ceases taking bits from the shorter ones when they run out.
 
-proc fdd::interleave {args} {
+proc fddd::interleave {args} {
     set N 0
     set names {}
     set bits {}
     foreach domain $args {
 	dict for {name width} [lindex $domain 0] {
 	    if {[dict exists $names $name]} {
-		return -code error -errorcode [list FDD DuplicateName $name] \
+		return -code error -errorcode [list FDDD DuplicateName $name] \
 		    "domain named \"$name\" appears in multiple places"
 	    }
 	    incr N $width
@@ -115,12 +115,12 @@ proc fdd::interleave {args} {
     return [list $names $scrambled]
 }
 
-# fdd::concatenate --
+# fddd::concatenate --
 #
 #	Concatenates the descriptions of a set of finite domains
 #
 # Usage:
-#	fdd::concatenate ?description...?
+#	fddd::concatenate ?description...?
 #
 # Parameters:
 #	Zero or more finite domain descriptions.
@@ -130,16 +130,16 @@ proc fdd::interleave {args} {
 #	together.
 #
 # Errors:
-#	{FDD DuplicateName $name} if any domain is not distinct
+#	{FDDD DuplicateName $name} if any domain is not distinct
 
-proc fdd::concatenate {args} {
+proc fddd::concatenate {args} {
     set N 0
     set names {}
     set bits {}
     foreach domain $args {
 	dict for {name width} [lindex $domain 0] {
 	    if {[dict exists $names $name]} {
-		return -code error -errorcode [list FDD DuplicateName $name] \
+		return -code error -errorcode [list FDDD DuplicateName $name] \
 		    "domain named \"$name\" appears in multiple places"
 	    }
 	    incr N $width
@@ -154,13 +154,13 @@ proc fdd::concatenate {args} {
     return [list $names $chain]
 }
 
-# fdd::reader --
+# fddd::reader --
 #
 #	Makes a call to the BDD engine to construct a minterm corresponding
 #	to a tuple in a finite domain.
 #
 # Usage:
-#	fdd::reader sysName termName layout domain ?domain...?
+#	fddd::reader sysName termName layout domain ?domain...?
 #
 # Parameters:
 #	sysName - Name of the system of BDD's
@@ -179,11 +179,11 @@ proc fdd::concatenate {args} {
 # Example:
 #
 # set desc \
-#     [fdd::concatenate \
-#         [fdd::domain var 3 bigendian] \
-#         [fdd::interleave \
-#             [fdd::domain stmt 5] [fdd::domain stmt2 5]]]
-#  set r [fdd::reader sys reads $desc stmt var]
+#     [fddd::concatenate \
+#         [fddd::domain var 3 bigendian] \
+#         [fddd::interleave \
+#             [fddd::domain stmt 5] [fddd::domain stmt2 5]]]
+#  set r [fddd::reader sys reads $desc stmt var]
 #
 # leaves desc set to:
 #
@@ -201,7 +201,7 @@ proc fdd::concatenate {args} {
 # 2**0 bit, variable 5 from parameter 0 the 2**1 bit ... variable 11 from
 # parameter 0 the 2**4 bit."
 
-proc fdd::reader {sysName termName layout args} {
+proc fddd::reader {sysName termName layout args} {
     set i 0
     foreach name $args {
 	dict set cmdpos $name $i
@@ -219,4 +219,4 @@ proc fdd::reader {sysName termName layout args} {
     return $cmd
 }
 
-package provide tclfdd 0.1
+package provide tclfddd  0.1

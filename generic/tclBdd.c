@@ -148,6 +148,8 @@ static int BddSystemNthvarMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				 int, Tcl_Obj* const[]);
 static int BddSystemProfileMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				  int, Tcl_Obj* const[]);
+static int BddSystemProjectMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				  int, Tcl_Obj* const[]);
 static int BddSystemQuantifyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -280,6 +282,13 @@ const static Tcl_MethodType BddSystemProfileMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemProjectMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "profile",			   /* name */
+    BddSystemProjectMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemQuantifyMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "quantify",			   /* name */
@@ -365,6 +374,7 @@ const static MethodTableRow systemMethodTable[] = {
     { "nthvar",    &BddSystemNthvarMethodType,    NULL },
     { "oneof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_ONEOF },
     { "profile",   &BddSystemProfileMethodType,   NULL },
+    { "project",   &BddSystemProjectMethodType,   NULL },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
     { "simplify",  &BddSystemSimplifyMethodType,  NULL },
@@ -1751,6 +1761,97 @@ BddSystemProfileMethod(
     ckfree(v);
     Tcl_SetObjResult(interp, Tcl_NewListObj(n, countv));
     ckfree(countv);
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemProjectMethod --
+ *
+ *	Projects away a set of variables from a BDD.
+ *
+ * Usage:
+ *	$system project result vars expr
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	result - Name of a BDD that will receive the result
+ *	var - List of integers giving positions of variables to project away.
+ *	expr - Expression to simplify
+ *
+ * Results:
+ *	Returns a standard Tcl result
+ *
+ * Side effects:
+ *	Creates the named expression if successful
+ *
+ * This is the same operation as existential quantification. It is provided
+ * for the convenience of Finite Domain Decision Diagrams, where it exists
+ * as the relational 'project' operator.
+ *
+ *-----------------------------------------------------------------------------
+ */
+static int
+BddSystemProjectMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex u;		/* Expression to quantify */
+    int varc;			/* Number of variables to project away */
+    Tcl_Obj** varv;		/* Indices of variables to project away */
+    int vIndex;			/* Variable number from Tcl */
+    BDD_VariableIndex* v;	/* Variables to quantify */
+    BDD_BeadIndex result;	/* Result of the quantification */
+    BDD_VariableIndex i;
+
+    /* Check syntax */
+
+    if (objc != skipped+3) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name varList expr");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+2],
+			    &u) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    if (Tcl_ListObjGetElements(interp, objv[skipped+1],
+			       &varc, &varv) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    v = ckalloc(varc * sizeof(BDD_VariableIndex));
+    for (i = 0; i < varc; ++i) {
+	if (Tcl_GetIntFromObj(interp, varv[i], &vIndex) != TCL_OK) {
+	    ckfree(v);
+	    return TCL_ERROR;
+	}
+	v[i] = (BDD_VariableIndex) vIndex;
+	if (i > 0 && v[i] <= v[i-1]) {
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj("variables are not in "
+						      "increasing order\n",
+						      -1));
+	    Tcl_SetErrorCode(interp, "BDD", "VarsOutOfOrder", NULL);
+	    ckfree(v);
+	    return TCL_ERROR;
+	}
+    }
+
+    result =
+	BDD_Quantify(sdata->system, BDD_QUANT_EXISTS, varc, v, u);
+
+    ckfree(v);
+    SetNamedExpression(sdata, objv[skipped], result);
+    BDD_UnrefBead(sdata->system, result);
     return TCL_OK;
 }
 
