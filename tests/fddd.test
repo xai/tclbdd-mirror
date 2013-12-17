@@ -358,7 +358,7 @@ test fddd-3.2 {reader - 2 columns} {
     -result {{0 0 1 1 2 1 3 0} {0 1 1 0 2 1 3 1} {0 1 1 1 2 0 3 1} 2}
 }
 
-test fddd-5.1 {project - wrong # args} {*}{
+test fddd-4.1 {project - wrong # args} {*}{
     -setup {
 	bdd::system create sys
     }
@@ -371,6 +371,97 @@ test fddd-5.1 {project - wrong # args} {*}{
     -result {wrong # args: *}
     -match glob
     -returnCodes error
+}
+
+test fddd-4.2 {project - can't find expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys project x {} garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test fddd-4.3 {project - malformed list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys project x \{ 1
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {unmatched open brace in list}
+    -returnCodes error
+}
+
+test fddd-4.4 {bad variable number} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys project x garbage 1
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {expected integer but got "garbage"}
+    -returnCodes error
+}
+
+test fddd-4.5 {bad variable number} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys project x {-2 -1} 1} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected nonnegative integer but got "-2"} {BDD NegativeVarIndex -2}}
+}
+
+test fddd-4.6 {variable numbers out of sequence} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys project x {1 0} 1} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {variables are not in increasing order} {BDD VarsOutOfOrder}}
+}
+
+test fddd-4.7 {project} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys & expr !e !f; sys & expr expr a
+	sys & term !e  f; sys & term term b; sys | expr expr term
+	sys & term  e !f; sys & term term c; sys | expr expr term
+	sys & term  e  f; sys & term term d; sys | expr expr term
+    }
+    -body {
+	sys | ye a b
+	sys | ye ye c
+	sys | ye ye d
+	sys project ze {4 5} expr
+	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
+	    [sys unset ye ze term expr a b c d e f !e !f] \
+	    [sys gc]
+    }
+    -cleanup {rename sys {}}
+    -result {1 {} 2}
 }
 
 # Local Variables:

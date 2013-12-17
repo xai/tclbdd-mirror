@@ -1813,7 +1813,9 @@ BddSystemProjectMethod(
     int vIndex;			/* Variable number from Tcl */
     BDD_VariableIndex* v;	/* Variables to quantify */
     BDD_BeadIndex result;	/* Result of the quantification */
+    Tcl_Obj* errorMessage;	/* Error message from this method */
     BDD_VariableIndex i;
+
 
     /* Check syntax */
 
@@ -1835,11 +1837,19 @@ BddSystemProjectMethod(
 	    ckfree(v);
 	    return TCL_ERROR;
 	}
+	if (vIndex < 0) {
+	    errorMessage =
+		Tcl_ObjPrintf("expected nonnegative integer but got \"%s\"",
+			      Tcl_GetString(varv[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NegativeVarIndex", 
+			     Tcl_GetString(varv[i]), NULL);
+	    return TCL_ERROR;
+	}
 	v[i] = (BDD_VariableIndex) vIndex;
 	if (i > 0 && v[i] <= v[i-1]) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("variables are not in "
-						      "increasing order\n",
-						      -1));
+						      "increasing order", -1));
 	    Tcl_SetErrorCode(interp, "BDD", "VarsOutOfOrder", NULL);
 	    ckfree(v);
 	    return TCL_ERROR;
