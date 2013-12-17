@@ -157,7 +157,7 @@ proc bdd::fddd::concatenate {args} {
 
 # bdd::fddd::reader --
 #
-#	Makes a call to the BDD engine to construct a minterm corresponding
+#	Makes a call to the BDD engine to construct a term corresponding
 #	to a tuple in a finite domain.
 #
 # Usage:
@@ -196,7 +196,7 @@ proc bdd::fddd::concatenate {args} {
 #   sys load reads {0 1 2 1 1 1 2 1 0 3 0 0 5 0 1 7 0 2 9 0 3 11 0 4}
 #
 # which (when two additional args are catenated on the end), asks the BDD
-# system "construct a minterm named 'reads', where variable zero is set from
+# system "construct a term named 'reads', where variable zero is set from
 # parameter 1, the 2**2 bit, variable 1 from parameter 1 the 2**1 bit,
 # variable 2 from parameter 1 the 2**0 bit, variable 3 from parameter 0 the
 # 2**0 bit, variable 5 from parameter 0 the 2**1 bit ... variable 11 from

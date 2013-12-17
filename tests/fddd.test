@@ -6,7 +6,7 @@
 
 package require tclbdd::fddd
 
-test fddd-1.1 {load minterm - wrong # args} {*}{
+test fddd-1.1 {load term - wrong # args} {*}{
     -setup {
 	bdd::system create sys
     }
@@ -21,7 +21,7 @@ test fddd-1.1 {load minterm - wrong # args} {*}{
     -returnCodes error
 }
 
-test fddd-1.2 {load minterm - bad integer} {*}{
+test fddd-1.2 {load term - bad integer} {*}{
     -setup {
 	bdd::system create sys
     } 
@@ -35,7 +35,7 @@ test fddd-1.2 {load minterm - bad integer} {*}{
     -returnCodes error
 }
 
-test fddd-1.3 {load minterm - ill-formed list} {
+test fddd-1.3 {load term - ill-formed list} {
     -setup {
 	bdd::system create sys
     }
@@ -49,7 +49,7 @@ test fddd-1.3 {load minterm - ill-formed list} {
     -returnCodes error
 }
 
-test fddd-1.4 {load minterm - wrong list size} {
+test fddd-1.4 {load term - wrong list size} {
     -setup {
 	bdd::system create sys
     }
@@ -175,7 +175,7 @@ test fddd-1.11 {load - do nothing gracefully} {*}{
     -result {1 {} 2}
 }
 
-test fddd-1.12 {load multiple minterms} {*}{
+test fddd-1.12 {load multiple terms} {*}{
     -setup {
 	bdd::system create sys
     }

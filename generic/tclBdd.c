@@ -1334,7 +1334,7 @@ BddSystemGCMethod(
  *
  * BDDSystemLoadMethod --
  *
- *	OR's a minterm representing a tuple in a finite domain into a
+ *	OR's a term representing a tuple in a finite domain into a
  *	BDD representing a relation.
  *
  * Usage:
@@ -1390,7 +1390,7 @@ BddSystemLoadMethod(
     int descc;			/* Count of elements in the description list */
     Tcl_Obj** descv;		/* Description list */
     int i;
-    BDD_BeadIndex minterm;	/* Minterm under construction */
+    BDD_BeadIndex term;		/* Term under construction */
     BDD_BeadIndex relation;	/* Relation under construction */
     BDD_BeadIndex temp;
     int lastVarIndex = INT_MAX;	/* Variable index from the last trip */
@@ -1440,10 +1440,10 @@ BddSystemLoadMethod(
     }
 
     /*
-     * Convert the given integer values to a minterm
+     * Convert the given integer values to a term
      */
-    minterm = 1;
-    BDD_IncrBeadRefCount(sdata->system, minterm);
+    term = 1;
+    BDD_IncrBeadRefCount(sdata->system, term);
     for (i = descc; i > 0; ) {
 	i -= 3;
 	/*
@@ -1452,7 +1452,7 @@ BddSystemLoadMethod(
 	if (Tcl_GetIntFromObj(interp, descv[i], &varIndex) != TCL_OK
 	    || Tcl_GetIntFromObj(interp, descv[i+1], &paramIndex) != TCL_OK
 	    || Tcl_GetIntFromObj(interp, descv[i+2], &bitPos) != TCL_OK) {
-	    BDD_UnrefBead(sdata->system, minterm);
+	    BDD_UnrefBead(sdata->system, term);
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
@@ -1460,7 +1460,7 @@ BddSystemLoadMethod(
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("variables are not in "
 						      "increasing order", -1));
 	    Tcl_SetErrorCode(interp, "BDD", "VarsOutOfOrder", NULL);
-	    BDD_UnrefBead(sdata->system, minterm);
+	    BDD_UnrefBead(sdata->system, term);
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
@@ -1470,7 +1470,7 @@ BddSystemLoadMethod(
 						      "nonexistent "
 						      "parameter", -1));
 	    Tcl_SetErrorCode(interp, "BDD", "NonexistentParam", NULL);
-	    BDD_UnrefBead(sdata->system, minterm);
+	    BDD_UnrefBead(sdata->system, term);
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
@@ -1478,29 +1478,29 @@ BddSystemLoadMethod(
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("bad bit index in "
 						      "description", -1));
 	    Tcl_SetErrorCode(interp, "BDD", "BadBitIndex", NULL);
-	    BDD_UnrefBead(sdata->system, minterm);
+	    BDD_UnrefBead(sdata->system, term);
 	    ckfree(paramv);
 	    return TCL_ERROR;
 	}
 
 	/*
-	 * Make a literal for the current bit and AND it with the minterm
+	 * Make a literal for the current bit and AND it with the term
 	 * under construction.
 	 */
 	if ((paramv[paramIndex] >> bitPos) & 1) {
 	    temp = BDD_MakeBead(sdata->system, (BDD_VariableIndex) varIndex,
-				(BDD_BeadIndex) 0, minterm);
+				(BDD_BeadIndex) 0, term);
 	} else {
 	    temp = BDD_MakeBead(sdata->system, (BDD_VariableIndex) varIndex,
-				minterm, 0);
+				term, 0);
 	}
-	BDD_UnrefBead(sdata->system, minterm);
-	minterm = temp;
+	BDD_UnrefBead(sdata->system, term);
+	term = temp;
     }
     ckfree(paramv);
 
     /*
-     * OR the minterm into the named relation, creating the empty
+     * OR the term into the named relation, creating the empty
      * relation if necessary.
      */
     entryPtr = Tcl_CreateHashEntry(sdata->expressions, name, &newFlag);
@@ -1511,9 +1511,9 @@ BddSystemLoadMethod(
 	relation = (BDD_BeadIndex) Tcl_GetHashValue(entryPtr);
     }
     temp = relation;
-    relation = BDD_Apply(sdata->system, BDD_BINOP_OR, relation, minterm);
+    relation = BDD_Apply(sdata->system, BDD_BINOP_OR, relation, term);
     BDD_UnrefBead(sdata->system, temp);
-    BDD_UnrefBead(sdata->system, minterm);
+    BDD_UnrefBead(sdata->system, term);
     Tcl_SetHashValue(entryPtr, relation);
 
     return TCL_OK;
