@@ -4,3 +4,5 @@
 package ifneeded @PACKAGE_NAME@ @PACKAGE_VERSION@ \
     "[list source [file join $dir @PACKAGE_NAME@.tcl]]\;\
      [list load [file join $dir @PKG_LIB_FILE@] @PACKAGE_NAME@]"
+package ifneeded @PACKAGE_NAME@::fddd @PACKAGE_VERSION@ \
+    [list source [file join $dir tclfddd.tcl]]

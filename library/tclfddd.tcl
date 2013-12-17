@@ -1,7 +1,7 @@
-#package require tclbdd 0.1
+package require tclbdd 0.1
 
-namespace eval fddd {
-    namespace export domain interleave concatenate
+namespace eval bdd::fddd {
+    namespace export concatenate domain interleave reader support
 }
 
 #-----------------------------------------------------------------------------
@@ -22,12 +22,12 @@ namespace eval fddd {
 #
 #-----------------------------------------------------------------------------
 
-# fddd::domain --
+# bdd::fddd::domain --
 #
 #	Defines a new finite domain
 #
 # Usage:
-#	fddd::domain name width ?endian?
+#	bdd::fddd::domain name width ?endian?
 #
 # Parameters:
 #	name - Name of the domain
@@ -40,7 +40,7 @@ namespace eval fddd {
 # Results:
 #	Returns a domain description.
 
-proc fddd::domain {name width {endian littleendian}} {
+proc bdd::fddd::domain {name width {endian littleendian}} {
     switch -exact -- $endian {
 	littleendian {
 	    set l {}
@@ -62,13 +62,13 @@ proc fddd::domain {name width {endian littleendian}} {
     return [list [dict create $name $width] $l]
 }
 
-# fddd::interleave --
+# bdd::bdd::fddd::interleave --
 #
 #	Interleaves some number of finite domains so that their bit positions
 #	in a BDD alternate.
 #
 # Usage:
-#	fddd::interleave ?description...?
+#	bdd::fddd::interleave ?description...?
 #
 # Parameters:
 #	Zero or more domain descriptions whose bits are to be interleaved.
@@ -84,7 +84,7 @@ proc fddd::domain {name width {endian littleendian}} {
 # one from the second, and so on. If they are of differing length, then
 # the process ceases taking bits from the shorter ones when they run out.
 
-proc fddd::interleave {args} {
+proc bdd::fddd::interleave {args} {
     set N 0
     set names {}
     set bits {}
@@ -96,8 +96,9 @@ proc fddd::interleave {args} {
 	    }
 	    incr N $width
 	    dict set names $name $width
-	    lappend bits [lindex $domain 1]
 	}
+	lappend bits [lindex $domain 1]
+
     }
     set processed 0
     set scrambled {}
@@ -115,12 +116,12 @@ proc fddd::interleave {args} {
     return [list $names $scrambled]
 }
 
-# fddd::concatenate --
+# bdd::fddd::concatenate --
 #
 #	Concatenates the descriptions of a set of finite domains
 #
 # Usage:
-#	fddd::concatenate ?description...?
+#	bdd::fddd::concatenate ?description...?
 #
 # Parameters:
 #	Zero or more finite domain descriptions.
@@ -132,7 +133,7 @@ proc fddd::interleave {args} {
 # Errors:
 #	{FDDD DuplicateName $name} if any domain is not distinct
 
-proc fddd::concatenate {args} {
+proc bdd::fddd::concatenate {args} {
     set N 0
     set names {}
     set bits {}
@@ -154,13 +155,13 @@ proc fddd::concatenate {args} {
     return [list $names $chain]
 }
 
-# fddd::reader --
+# bdd::fddd::reader --
 #
 #	Makes a call to the BDD engine to construct a minterm corresponding
 #	to a tuple in a finite domain.
 #
 # Usage:
-#	fddd::reader sysName termName layout domain ?domain...?
+#	bdd::fddd::reader sysName termName layout domain ?domain...?
 #
 # Parameters:
 #	sysName - Name of the system of BDD's
@@ -179,11 +180,11 @@ proc fddd::concatenate {args} {
 # Example:
 #
 # set desc \
-#     [fddd::concatenate \
-#         [fddd::domain var 3 bigendian] \
-#         [fddd::interleave \
-#             [fddd::domain stmt 5] [fddd::domain stmt2 5]]]
-#  set r [fddd::reader sys reads $desc stmt var]
+#     [bdd::fddd::concatenate \
+#         [bdd::fddd::domain var 3 bigendian] \
+#         [bdd::fddd::interleave \
+#             [bdd::fddd::domain stmt 5] [bdd::fddd::domain stmt2 5]]]
+#  set r [bdd::fddd::reader sys reads $desc stmt var]
 #
 # leaves desc set to:
 #
@@ -201,7 +202,7 @@ proc fddd::concatenate {args} {
 # 2**0 bit, variable 5 from parameter 0 the 2**1 bit ... variable 11 from
 # parameter 0 the 2**4 bit."
 
-proc fddd::reader {sysName termName layout args} {
+proc bdd::fddd::reader {sysName termName layout args} {
     set i 0
     foreach name $args {
 	dict set cmdpos $name $i
@@ -219,4 +220,28 @@ proc fddd::reader {sysName termName layout args} {
     return $cmd
 }
 
-package provide tclfddd  0.1
+# bdd::fddd::support --
+#
+#	Makes a call to the BDD engine to determine the support of a relation
+#	in a finite domain
+#
+# Usage:
+#	bdd::fddd::support sysName relationName layout
+#
+# Parameters:
+#	sysName - Name of the system of BDD's
+#	relationName - Name of the relation to be analyzed
+#	layout - Description of the finite domain
+#
+# Results:
+#	Returns the names of variables on which the relation depends.
+
+proc bdd::fddd::support {sysName relationName layout} {
+    set haveVar {}
+    foreach bit [$sysName support $relationName] {
+	dict set haveVar [lindex $layout 1 [expr {2 * $bit}]] {}
+    }
+    return [dict keys $haveVar]
+}
+
+package provide tclbdd::fddd 0.1

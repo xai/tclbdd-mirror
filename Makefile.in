@@ -239,7 +239,9 @@ install-doc: doc
 test: binaries libraries
 	$(TCLSH) `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS) \
 		-load "package ifneeded ${PACKAGE_NAME} ${PACKAGE_VERSION}\
-	                [list source `@CYGPATH@ $(srcdir)/library/tclbdd.tcl`]\;[list load `@CYGPATH@ $(PKG_LIB_FILE)` $(PACKAGE_NAME)]"
+	                [list source `@CYGPATH@ $(srcdir)/library/tclbdd.tcl`]\;[list load `@CYGPATH@ ./$(PKG_LIB_FILE)` $(PACKAGE_NAME)]" \
+		-load "package ifneeded ${PACKAGE_NAME}::tclfddd ${PACKAGE_VERSION}\
+		    [list source `@CYGPATH@ $(srcdir)/library/tclfddd.tcl`]"
 
 shell: binaries libraries
 	@$(TCLSH) $(SCRIPT)
@@ -254,7 +256,9 @@ valgrind: binaries libraries
 	$(TCLSH_ENV) valgrind $(VALGRINDARGS) $(TCLSH_PROG) \
 		`@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS) \
 		-load "package ifneeded ${PACKAGE_NAME} ${PACKAGE_VERSION}\
-	                [list source `@CYGPATH@ $(srcdir)/library/tclbdd.tcl`]\;[list load `@CYGPATH@ ./$(PKG_LIB_FILE)` $(PACKAGE_NAME)]"
+	                [list source `@CYGPATH@ $(srcdir)/library/tclbdd.tcl`]\;[list load `@CYGPATH@ ./$(PKG_LIB_FILE)` $(PACKAGE_NAME)]" \
+		-load "package ifneeded ${PACKAGE_NAME}::tclfddd ${PACKAGE_VERSION}\
+		    [list source `@CYGPATH@ $(srcdir)/library/tclfddd.tcl`]"
 
 valgrindshell: binaries libraries
 	$(TCLSH_ENV) valgrind $(VALGRINDARGS) $(TCLSH_PROG) $(SCRIPT)
