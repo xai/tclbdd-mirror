@@ -464,6 +464,138 @@ test fddd-4.7 {project} {*}{
     -result {1 {} 2}
 }
 
+test fddd-5.1 {replace - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys replace
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test fddd-5.2 {replace - missing expression} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y {} {} garbage} result] $result $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expression named "garbage" not found} {BDD ExprNotFound garbage} 2}
+}
+
+test fddd-5.3 {replace - malformed first list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y \{ {} 0} result] $result [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {unmatched open brace in list} 2}
+}
+
+test fddd-5.4 {replace - malformed second list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y {} \{ 0} result] $result [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {unmatched open brace in list} 2}
+}
+
+test fddd-5.5 {replace - different list lengths} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y {} {1} 0} result] $result $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {variable list and replacement list have different lengths} {BDD WrongListLengths} 2}
+}
+
+test fddd-5.6 {replace - bad integer in first list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y garbage 0 0} result] $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test fddd-5.7 {replace - bad integer in second list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y 0 garbage 0} result] $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test fddd-5.8 {replace - nonexistent var to replace} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys < c a b
+    }
+    -body {
+	sys replace y 7 0 c
+	list [sys === y c] [sys unset a b c y] [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {} 2}
+}
+
+test fddd-5.9 {replace} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys < c a b
+	sys > d a b
+    }
+    -body {
+	sys replace y {1 0} {0 1} c
+	list [sys === y d] [sys unset a b c d y] [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {} 2}
+}
+
 # Local Variables:
 # mode: tcl
 # c-basic-offset: 4

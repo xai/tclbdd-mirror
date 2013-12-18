@@ -152,6 +152,8 @@ static int BddSystemProjectMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				  int, Tcl_Obj* const[]);
 static int BddSystemQuantifyMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
+static int BddSystemReplaceMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				  int, Tcl_Obj* const[]);
 static int BddSystemRestrictMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemSatcountMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -296,6 +298,13 @@ const static Tcl_MethodType BddSystemQuantifyMethodType = {
     DeleteMethod,		   /* method delete proc */
     CloneMethod			   /* method clone proc */
 };
+const static Tcl_MethodType BddSystemReplaceMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "replace",			   /* name */
+    BddSystemReplaceMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemRestrictMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "restrict",			   /* name */
@@ -375,6 +384,7 @@ const static MethodTableRow systemMethodTable[] = {
     { "oneof3",    &BddSystemTernopMethodType,  (ClientData) BDD_TERNOP_ONEOF },
     { "profile",   &BddSystemProfileMethodType,   NULL },
     { "project",   &BddSystemProjectMethodType,   NULL },
+    { "replace",   &BddSystemReplaceMethodType,   NULL },
     { "restrict",  &BddSystemRestrictMethodType,  NULL },
     { "satcount",  &BddSystemSatcountMethodType,  NULL },
     { "simplify",  &BddSystemSimplifyMethodType,  NULL },
@@ -1777,7 +1787,7 @@ BddSystemProfileMethod(
  * Parameters:
  *	system - System of BDD's
  *	result - Name of a BDD that will receive the result
- *	var - List of integers giving positions of variables to project away.
+ *	vars - List of integers giving positions of variables to project away.
  *	expr - Expression to simplify
  *
  * Results:
@@ -1966,6 +1976,154 @@ BddSystemQuantifyMethod(
     SetNamedExpression(sdata, objv[skipped], result);
     BDD_UnrefBead(sdata->system, result);
     return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * BddSystemReplaceMethod --
+ *
+ *	Replaces a set of variables in a BDD with other variables.
+ *
+ * Usage:
+ *	$system project result vars vars2 expr
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	result - Name of a BDD that will receive the result
+ *	vars - List of integers giving positions of variables to replace
+ *	vars2 - List of integers giving positions of variables that will
+ *              replace vars. The two lists must have the same length.
+ *	expr - Expression to rewrite
+ *
+ * Results:
+ *	Returns a standard Tcl result
+ *
+ * Side effects:
+ *	Creates the named expression if successful
+ *
+ * This is the same operation as existential quantification. It is provided
+ * for the convenience of Finite Domain Decision Diagrams, where it exists
+ * as the relational 'project' operator.
+ *
+ *-----------------------------------------------------------------------------
+ */
+static int
+BddSystemReplaceMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    BDD_BeadIndex u;		/* Expression to quantify */
+    int varc;			/* Number of variables to replace */
+    Tcl_Obj** varv;		/* Indices of variables to replace */
+    int vIndex;			/* Variable number from Tcl */
+    int var2c;			/* Number of replacement variables */
+    Tcl_Obj** var2v;		/* Indices of replacement variables */
+    int v2Index;		/* Variable number of a replacement */
+    BDD_VariableIndex totalv;	/* Number of variables in the BDD system */
+    BDD_VariableIndex replacedv = 0;
+				/* Count of variables that have replacements */
+    BDD_BeadIndex* replacements;/* Description of the variable replacement
+				 * to be performed. */
+    BDD_BeadIndex result;	/* Result of the quantification */
+    Tcl_Obj* errorMessage;	/* Error message from this method */
+    int retval = TCL_ERROR;	/* Return value from this method */
+    BDD_VariableIndex i;
+
+
+    /* Check syntax */
+
+    if (objc != skipped+4) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name vars vars2 expr");
+	return TCL_ERROR;
+    }
+    if (FindNamedExpression(interp, sdata, objv[skipped+3],
+			    &u) != TCL_OK
+	|| Tcl_ListObjGetElements(interp, objv[skipped+1],
+				  &varc, &varv) != TCL_OK
+	|| Tcl_ListObjGetElements(interp, objv[skipped+2],
+				  &var2c, &var2v) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    if (varc != var2c) {
+	Tcl_SetObjResult(interp, Tcl_NewStringObj("variable list and "
+						  "replacement list have "
+						  "different lengths", -1));
+	Tcl_SetErrorCode(interp, "BDD", "WrongListLengths", NULL);
+	return TCL_ERROR;
+    }
+
+    /*
+     * Allocate space for replacement description, and initialize the
+     * description to replace all variables with themselves.
+     */
+
+    totalv = BDD_GetVariableCount(sdata->system);
+    replacements = ckalloc(totalv * sizeof(BDD_BeadIndex));
+    for (i = 0; i < totalv; ++i) {
+	replacements[i] = BDD_MakeBead(sdata->system, i, 0, 1);
+    }
+
+    for (i = 0; i < varc; ++i) {
+	if (Tcl_GetIntFromObj(interp, varv[i], &vIndex) != TCL_OK
+	    || Tcl_GetIntFromObj(interp, var2v[i], &v2Index) != TCL_OK) {
+	    goto cleanup;
+	}
+	if (vIndex < 0) {
+	    errorMessage =
+		Tcl_ObjPrintf("expected nonnegative integer but got \"%s\"",
+			      Tcl_GetString(varv[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NegativeVarIndex", 
+			     Tcl_GetString(varv[i]), NULL);
+	    goto cleanup;
+	}
+	if (v2Index < 0) {
+	    errorMessage =
+		Tcl_ObjPrintf("expected nonnegative integer but got \"%s\"",
+			      Tcl_GetString(var2v[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NegativeVarIndex", 
+			     Tcl_GetString(var2v[i]), NULL);
+	    goto cleanup;
+	}
+	if (vIndex >= totalv) {
+	    /*
+	     * Silently ignore requests to replace a nonexistent variable
+	     */
+	    continue;
+	}
+	
+	result = BDD_MakeBead(sdata->system, (BDD_VariableIndex) v2Index,
+			      0, 1);
+	BDD_UnrefBead(sdata->system, replacements[vIndex]);
+	replacements[vIndex] = result;
+	if (vIndex >= replacedv) {
+	    replacedv = vIndex + 1;
+	}
+    }
+
+    retval = TCL_OK;
+    result = BDD_Compose(sdata->system, u, replacedv, replacements);
+    SetNamedExpression(sdata, objv[skipped], result);
+    BDD_UnrefBead(sdata->system, result);
+
+ cleanup:
+    for (i = 0; i < totalv; ++i) {
+	BDD_UnrefBead(sdata->system, replacements[i]);
+    }
+    ckfree(replacements);
+    return retval;
 }
 
 /*

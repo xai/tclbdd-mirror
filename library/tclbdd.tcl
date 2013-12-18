@@ -65,7 +65,7 @@ oo::class create bdd::system {
     # output, while === tests whether they give the same output always.
 
     method === {exprName1 exprName2} {
-	expr {[my beadindex $exprName1] == [my beadindex exprName2]}
+	expr {[my beadindex $exprName1] == [my beadindex $exprName2]}
     }
     export ===
 
