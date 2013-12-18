@@ -11,8 +11,8 @@ namespace eval bdd::fddd {
 # consists of two parts:
 #	    
 #	(1) A dictionary whose keys are domain names and whose values
-#	    are the number of bits used to encode values in the given
-#	    domains.
+#	    are lists of variable indices used to encode values in the given
+#	    domains. The lists appear least significant bit first.
 #
 #	(2) A list that gives the layout of BDD variables that
 #	    represent values in the given domains. The list appears in
@@ -21,6 +21,31 @@ namespace eval bdd::fddd {
 #	    position zero being the least significant bit).
 #
 #-----------------------------------------------------------------------------
+
+# bdd::fddd::Invert --
+#
+#	Given the list of column names and bit positions in the database
+#	layout, makes an inverted list indexed by column giving the
+#	bit positions of that column
+
+proc bdd::fddd::Invert {bitlist} {
+    set i 0
+    set result {}
+    foreach {name pos} $bitlist {
+	if {[dict exists $result $name]} {
+	    set l [dict get $result $name]
+	} else {
+	    set l {}
+	}
+	while {[llength $l] <= $pos} {
+	    lappend l {}
+	}
+	lset l $pos $i
+	dict set result $name $l
+	incr i
+    }
+    return $result
+}
 
 # bdd::fddd::domain --
 #
@@ -59,7 +84,7 @@ proc bdd::fddd::domain {name width {endian littleendian}} {
 		"unknown endian \"$endian\": must be bigendian or littleendian"
 	}
     }
-    return [list [dict create $name $width] $l]
+    return [list [Invert $l] $l]
 }
 
 # bdd::bdd::fddd::interleave --
@@ -89,16 +114,15 @@ proc bdd::fddd::interleave {args} {
     set names {}
     set bits {}
     foreach domain $args {
-	dict for {name width} [lindex $domain 0] {
+	dict for {name poslist} [lindex $domain 0] {
 	    if {[dict exists $names $name]} {
 		return -code error -errorcode [list FDDD DuplicateName $name] \
 		    "domain named \"$name\" appears in multiple places"
 	    }
-	    incr N $width
-	    dict set names $name $width
+	    incr N [llength $poslist]
+	    dict set names $name {}
 	}
 	lappend bits [lindex $domain 1]
-
     }
     set processed 0
     set scrambled {}
@@ -113,7 +137,7 @@ proc bdd::fddd::interleave {args} {
 	    incr i
 	}
     }
-    return [list $names $scrambled]
+    return [list [Invert $scrambled] $scrambled]
 }
 
 # bdd::fddd::concatenate --
@@ -138,13 +162,13 @@ proc bdd::fddd::concatenate {args} {
     set names {}
     set bits {}
     foreach domain $args {
-	dict for {name width} [lindex $domain 0] {
+	dict for {name poslist} [lindex $domain 0] {
 	    if {[dict exists $names $name]} {
 		return -code error -errorcode [list FDDD DuplicateName $name] \
 		    "domain named \"$name\" appears in multiple places"
 	    }
-	    incr N $width
-	    dict set names $name $width
+	    incr N [llength $poslist]
+	    dict set names $name {}
 	}
 	lappend bits [lindex $domain 1]
     }
@@ -152,7 +176,7 @@ proc bdd::fddd::concatenate {args} {
     foreach b $bits {
 	lappend chain {*}$b
     }
-    return [list $names $chain]
+    return [list [Invert $chain] $chain]
 }
 
 # bdd::fddd::reader --
