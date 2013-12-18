@@ -1797,8 +1797,11 @@ BddSystemProfileMethod(
  *	Creates the named expression if successful
  *
  * This is the same operation as existential quantification. It is provided
- * for the convenience of Finite Domain Decision Diagrams, where it exists
- * as the relational 'project' operator.
+ * for the convenience of Finite Domain Decision Diagrams, where it implements
+ * the relational 'project' operator. Note that the notation is different
+ * from the usual 'project'; the variable list to this command specifies the
+ * variables to discard, while the conventional 'project' operation specifies
+ * the columns to keep.
  *
  *-----------------------------------------------------------------------------
  */
