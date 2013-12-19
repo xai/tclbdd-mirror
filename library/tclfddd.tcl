@@ -268,4 +268,322 @@ proc bdd::fddd::support {sysName relationName layout} {
     return [dict keys $haveVar]
 }
 
+oo::class create bdd::fddd::database {
+
+    variable m_columns m_relcolumns m_variables
+
+    constructor {layout} {
+	#puts "LAYOUT: $layout"
+	if {[llength $layout] != 2} {
+	    if {[string length $layout] > 40} {
+		set elayout [string range $layout 0 39]...
+	    } else {
+		set elayout $layout
+	    }
+	    return -code error -errorcode [list FDDD NotLayout $layout] \
+		"expected a domain layout but found \"$elayout\""
+	}
+	lassign $layout m_columns m_variables
+	set m_relcolumns {}
+	bdd::system create [namespace current]::sys
+    }
+
+    # TODO - Check domain consistency?
+    method === {rel1 rel2} {
+	return [sys === $rel1 $rel2]
+    }
+    export ===
+
+    method Varlist {relation} {
+	#puts "What are the variables for $relation?"
+	set retval {}
+	foreach col [dict get $m_relcolumns $relation] {
+	    #puts "$col has variables [dict get $m_columns $col]"
+	    lappend retval {*}[dict get $m_columns $col]
+	}
+	return $retval
+    }
+
+    method columns {} {
+	return [dict keys $m_columns]
+    }
+
+    method difference {dest source1 source2} {
+	# TODO typecheck
+	return [list [namespace which sys] > $dest $source1 $source2]
+    }
+
+    # TODO - How can this be streamlined?
+
+    method enumerate {dictvar relation script} {
+	upvar 1 $dictvar valdict
+	if {![dict exists $m_relcolumns $relation]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $relation] \
+		"relation \"$relation\" is not defined in this database"
+	}
+	sys foreach_sat satterm $relation {
+	    #puts "expand a term of $relation with variables [my Varlist $relation]"
+	    bdd::foreach_fullsat vars [my Varlist $relation] $satterm {
+		#puts "and values $vars"
+		set i 0
+		foreach column [dict get $m_relcolumns $relation] {
+		    set varsForColumn [dict get $m_columns $column]
+		    set value 0
+		    for {set j 0} {$j < [llength $varsForColumn]} {incr j} {
+			set value [expr {$value | ([lindex $vars $i] << $j)}]
+			incr i
+		    }
+		    dict set valdict $column $value
+		}
+		try {
+		    uplevel 1 $script
+		} on error {message options} {
+		    dict incr options -level 1
+		    return -options $options $message
+		} on return {retval options} {
+		    dict incr $options -level 1
+		    return -options $options $message
+		} on break {} {
+		    return -level 0 -code 6
+		} on continue {} {
+		    continue
+		}
+	    }
+	}
+	return
+    }
+
+    method forget_relation {name} {
+	sys unset $name
+	dict unset m_relcolumns $name
+	return
+    }
+
+    method gc {} {
+	return [sys gc]
+    }
+
+    method join {dest source1 source2} {
+	if {![dict exists $m_relcolumns $dest]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $dest] \
+		"relation \"$dest\" is not defined in this database"
+	}
+	if {![dict exists $m_relcolumns $source1]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $source1] \
+		"relation \"$source1\" is not defined in this database"
+	}
+	if {![dict exists $m_relcolumns $source2]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $source2] \
+		"relation \"$source2\" is not defined in this database"
+	}
+	set destcolumns [dict get $m_relcolumns $source1]
+	lappend destcolumns {*}[dict get $m_relcolumns $source2]
+	set destcolumns [lsort -ascii -unique $destcolumns]
+	set destcolumns_sb [dict get $m_relcolumns $dest]
+	if {$destcolumns ne $destcolumns_sb} {
+	    return -code error \
+		-errorcode [list FDDD BadJoin $destcolumns $destcolumns_sb] \
+		"result of the join has columns $destcolumns but the\
+                 target relation has columns $destcolumns_sb"
+	}
+	return [list [namespace which sys] & $dest $source1 $source2]
+    }
+
+    method load {name list} {
+	if {![dict exists $m_relcolumns $name]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $name] \
+		"relation \"$name\" is not defined in this database"
+	}
+	set nColumns [llength [dict get $m_relcolumns $name]]
+	if {[llength $list] % $nColumns != 0} {
+	    return -code error \
+		-errorcode [list FDDD WrongListLength $nColumns] \
+		"list must have a multiple of $nColumns values"
+	}
+	set reader [bdd::fddd::reader [namespace current]::sys \
+			$name [list $m_columns $m_variables] \
+			{*}[dict get $m_relcolumns $name]]
+	set nCM1 [expr {$nColumns - 1}]
+	while {[llength $list] > 0} {
+	    {*}$reader {*}[lrange $list 0 $nCM1]
+	    set list [lreplace ${list}[set list {}] 0 $nCM1]
+	}
+	return
+    }
+
+    method profile {relation} {
+	if {![dict exists $m_relcolumns $relation]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $relation] \
+		"relation \"$relation\" is not defined in this database"
+	}
+	sys profile $relation
+    }
+
+    method project {dest source} {
+	# columns to project away are determined by dest and source
+	if {![dict exists $m_relcolumns $dest]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $dest] \
+		"relation \"$dest\" is not defined in this database"
+	}
+	if {![dict exists $m_relcolumns $source]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $source] \
+		"relation \"$source\" is not defined in this database"
+	}
+	set discards {}
+	foreach col [dict get $m_relcolumns $dest] {
+	    dict set want $col {}
+	}
+	foreach col [dict get $m_relcolumns $source] {
+	    if {![dict exists $want $col]} {
+		lappend discards {*}[dict get $m_columns $col]
+	    } else {
+		dict unset want $col
+	    }
+	}
+	if {[dict size $want] != 0} {
+	    return -code error \
+		-errorcode [list FDDD ProjectColumnMissing {*}[dict keys $want]]\
+		"columns missing from source relation: [dict keys $want]"
+	}
+	return [list [namespace which sys] project $dest \
+		    [lsort -integer $discards] $source]
+	return
+    }
+
+    method relation {name args} {
+	if {[dict exists $m_relcolumns $name]} {
+	    return -code error \
+		-errorcode [list FDDD RelationAlreadyDefined $name] \
+		"relation \"$name\" is already defined in this database"
+	}
+	set havecol {}
+	foreach col $args {
+	    if {[dict exists $havecol $col]} {
+		return -code error -errorcode [list FDDD DuplicateColumn $col] \
+		    "column $col is duplicated in the column list"
+	    }
+	    if {![dict exists $m_columns $col]} {
+		return -code error -errorcode [list FDDD NoSuchColumn $col] \
+		    "no such column: \"$col\""
+	    }
+	    dict set $havecol $col {}
+	}
+	dict set m_relcolumns $name [lsort -ascii $args]
+	return $name
+    }
+
+    method replace {dest source args} {
+	if {![dict exists $m_relcolumns $dest]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $dest] \
+		"relation \"$dest\" is not defined in this database"
+	}
+	if {![dict exists $m_relcolumns $source]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $source] \
+		"relation \"$source\" is not defined in this database"
+	}
+	set sourcecols {}
+	foreach col [dict get $m_relcolumns $source] {
+	    dict set sourcecols $col {}
+	}
+	set destcols {}
+	foreach col [dict get $m_relcolumns $dest] {
+	    dict set destcols $col {}
+	}
+	set colsAdded {}
+	foreach {to from} $args {
+	    if {[dict exists $colsAdded $to]} {
+		return -code error \
+		    -errorcode [list FDDD DuplicateProjectOutput $to] \
+		    "attempt to rename two input columns to \"$to\""
+	    }
+	    if {![dict exists $sourcecols $from]} {
+		return -code error \
+		    -errorcode [list FDDD BadProjectInput $from] \
+		    "attempt to rename an input column \"from\" that\
+		     does not exist or has already been renamed"
+	    }
+	    if {![dict exists $destcols $to]} {
+		return -code error \
+		    -errorcode [list FDDD BadProjectOutput $to] \
+		    "attempt to rename an input column to \"$to\",
+                     which does not exist in \"$dest\""
+	    }
+	    dict unset sourcecols $from
+	    dict set colsAdded $to {}
+	}
+	foreach {to from} $args {
+	    if {[dict exists $sourcecols $to]} {
+		return -code error \
+		    -errorcode [list FDDD ProjectOutputOverInput $to] \
+		    "attempt to rename an input column to \"$to\",
+                     but another input column already has that name."
+	    }
+	    dict set sourcecols $to {}
+	}
+	if {[lsort [dict keys $sourcecols]] ne [dict get $m_relcolumns $dest]} {
+	    return -code error \
+		-errorcode [list FDDD ProjectWrongColumns \
+				[dict keys $sourcecols] \
+				[dict get $m_relcolumns $dest]] \
+		"replacement yields columns [dict keys $sourcecols]\
+                 but target relation has columns\
+                 [dict get $m_relcolumns $dest]"
+	}
+	set fromvars {}
+	set tovars {}
+	foreach {to from} $args {
+	    set tv [dict get $m_columns $to]
+	    set fv [dict get $m_columns $from]
+	    if {[llength $tv] < [llength $fv]} {
+		return -code error \
+		    -errorcode [list FDDD ProjectColumnTooNarrow $from $to] \
+		    "replacement column \"$to\" is to narrow to hold values\
+                     from column \"$from\""
+	    }
+	    lappend fromvars {*}$fv
+	    lappend tovars {*}[lrange $tv 0 [expr {[llength $fv] - 1}]]
+	}
+	return [list [namespace which sys] replace $dest $fromvars $tovars $source]
+    }
+	    
+    method set {dest source} {
+	if {![dict exists $m_relcolumns $dest]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $dest] \
+		"relation \"$dest\" is not defined in this database"
+	}
+	if {$source eq {}} {
+	    set source 0
+	} else {
+	    if {![dict exists $m_relcolumns $source]} {
+		return -code error \
+		    -errorcode [list FDDD RelationNotDefined $source] \
+		    "relation \"$source\" is not defined in this database"
+	    }
+	    if {[dict get $m_relcolumns $dest]
+		ne [dict get $m_relcolumns $source]} {
+		return -code error \
+		    -errorcode [list FDDD WrongColumns $dest $source] \
+		    "relations \"$dest\" and \"$source\" have different columns"
+	    }
+	}
+	return [list [namespace which sys] := $dest $source]
+    }
+
+    method union {dest source1 source2} {
+	# TODO typecheck
+	return [list [namespace which sys] | $dest $source1 $source2]
+    }
+}
+
 package provide tclbdd::fddd 0.1
