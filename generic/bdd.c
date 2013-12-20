@@ -1692,7 +1692,7 @@ Quantify(
 
     for (;;) {
 	Bead* beadPtr = sysPtr->beads + u;
-	if (n == 0) {
+	if (n == 0 || *v >= sysPtr->beads[0].level) {
 	    /*
 	     * No variables remain to quantify. Simply return the expression
 	     * itself.
