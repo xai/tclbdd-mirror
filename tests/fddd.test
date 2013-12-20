@@ -464,6 +464,30 @@ test fddd-4.7 {project} {*}{
     -result {1 {} 2}
 }
 
+test fddd-4.8 {project with unused variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys & expr !e !f; sys & expr expr a
+	sys & term !e  f; sys & term term b; sys | expr expr term
+	sys & term  e !f; sys & term term c; sys | expr expr term
+	sys & term  e  f; sys & term term d; sys | expr expr term
+    }
+    -body {
+	sys | ye a b
+	sys | ye ye c
+	sys | ye ye d
+	sys project ze {4 5 42} expr
+	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
+	    [sys unset ye ze term expr a b c d e f !e !f] \
+	    [sys gc]
+    }
+    -cleanup {rename sys {}}
+    -result {1 {} 2}
+}
+
 test fddd-5.1 {replace - wrong # args} {*}{
     -setup {
 	bdd::system create sys
