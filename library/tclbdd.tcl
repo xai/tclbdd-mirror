@@ -197,10 +197,10 @@ proc bdd::foreach_fullsat {v varlist satterm script} {
 	    try {
 		uplevel 1 $script
 	    } on error {message options} {
-		dict incr $options -level 1
+		dict incr options -level 1
 		return -options $options $message
 	    } on return {retval options} {
-		dict incr $options -level 1
+		dict incr options -level 1
 		return -options $options $retval
 	    } on break {} {
 		break

@@ -308,7 +308,26 @@ oo::class create bdd::fddd::database {
 	return [dict keys $m_columns]
     }
 
-    method difference {dest source1 source2} {
+    method set {dest source} {
+	if {![dict exists $m_relcolumns $dest]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $dest] \
+		"relation \"$dest\" is not defined in this database"
+	}
+	if {![dict exists $m_relcolumns $source]} {
+	    return -code error \
+		-errorcode [list FDDD RelationNotDefined $source] \
+		"relation \"$source\" is not defined in this database"
+	}
+	if {[dict get $m_relcolumns $dest]
+	    ne [dict get $m_relcolumns $source]} {
+	    return -code error \
+		-errorcode [list FDDD WrongColumns $dest $source] \
+		"relations \"$dest\" and \"$source\" have different columns"
+	}
+	return [list [namespace which sys] negate $dest $source]
+    }
+    method antijoin {dest source1 source2} {
 	# TODO typecheck
 	return [list [namespace which sys] > $dest $source1 $source2]
     }
@@ -327,6 +346,7 @@ oo::class create bdd::fddd::database {
 	    bdd::foreach_fullsat vars [my Varlist $relation] $satterm {
 		#puts "and values $vars"
 		set i 0
+		set valdict {}
 		foreach column [dict get $m_relcolumns $relation] {
 		    set varsForColumn [dict get $m_columns $column]
 		    set value 0
@@ -342,7 +362,7 @@ oo::class create bdd::fddd::database {
 		    dict incr options -level 1
 		    return -options $options $message
 		} on return {retval options} {
-		    dict incr $options -level 1
+		    dict incr options -level 1
 		    return -options $options $message
 		} on break {} {
 		    return -level 0 -code 6
@@ -362,6 +382,34 @@ oo::class create bdd::fddd::database {
 
     method gc {} {
 	return [sys gc]
+    }
+
+    method equate {dest col1 col2} {
+	if {![dict exists $m_columns $col1]} {
+	    return -code error -errorcode [list FDDD NoSuchColumn $col1] \
+		"no such column: \"$col1\""
+	}
+	if {![dict exists $m_columns $col2]} {
+	    return -code error -errorcode [list FDDD NoSuchColumn $col2] \
+		"no such column: \"$col2\""
+	}
+	set vars1 [dict get $m_columns $col1]
+	set vars2 [dict get $m_columns $col2]
+	if {[llength $vars1] != [llength $vars2]} {
+	    return -code error \
+		-errorcode [list FDDD EquateWrongDomains $col1 $col2] \
+		"cannot equate domains \"$col1\" and \"$col2\":\
+                 sizes do not match"
+	}
+	# TODO - Typecheck $dest and sort one list in decreasing order by var#
+	sys := $dest 1
+	foreach v $vars1 v2 $vars2 {
+	    sys nthvar _a $v
+	    sys nthvar _b $v2
+	    sys == temp _a _b
+	    sys & $dest $dest temp
+	}
+	sys unset temp _a _b
     }
 
     method join {dest source1 source2} {
@@ -564,6 +612,8 @@ oo::class create bdd::fddd::database {
 	}
 	if {$source eq {}} {
 	    set source 0
+	} elseif {$source eq {_}} {
+	    set source 1
 	} else {
 	    if {![dict exists $m_relcolumns $source]} {
 		return -code error \
