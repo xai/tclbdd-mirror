@@ -1,0 +1,10 @@
+# Script to define the local packages when testing against an uninstalled
+# tclbdd
+
+package ifneeded tclbdd @PACKAGE_VERSION@ {
+    source [file join {@LIBRARY_SRCDIR@} tclbdd.tcl]
+    load [file join . @PKG_LIB_FILE@] tclbdd
+}
+package ifneeded tclbdd::fddd @PACKAGE_VERSION@ {
+    source [file join {@LIBRARY_SRCDIR@} tclfddd.tcl]
+}
