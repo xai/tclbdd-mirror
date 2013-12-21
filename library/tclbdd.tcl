@@ -103,7 +103,7 @@ oo::class create bdd::system {
     #	Returns 1 if the expression is a tautology, 0 otherwise.
 
     method tautology {exprName} {
-	expr {[my beadindex $exprname] == 1}
+	expr {[my beadindex $exprName] == 1}
     }
 
     # Method: support
@@ -132,6 +132,7 @@ oo::class create bdd::system {
 	    }
 	    incr i
 	}
+	return $result
     }
 
     # Method: beadcount

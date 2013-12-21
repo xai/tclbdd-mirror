@@ -2836,6 +2836,225 @@ test bdd-20.7 {simplify changes variables} {*}{
     -result {1 {} 2}
 }
 
+test bdd-30.1 {=== - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys ===
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-30.2 {===} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {
+	list \
+	    [sys === 0 0]  [sys === 0 1]  [sys === 0 a]  [sys === 0 !a] \
+	    [sys === 1 0]  [sys === 1 1]  [sys === 1 a]  [sys === 1 !a] \
+	    [sys === a 0]  [sys === a 1]  [sys === a a]  [sys === a !a] \
+	    [sys === !a 0] [sys === !a 1] [sys === !a a] [sys === !a !a] \
+	    [sys unset a !a] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 {} 2}
+}
+
+test bdd-30.3 {=== - bad first arg} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys === 0 garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-30.4 {=== - bad second arg} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys === garbage 0} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-31.1 {tautology - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys tautology
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-31.2 {tautology - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys tautology garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-31.3 {tautology} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {
+	list \
+	    [sys tautology 0] [sys tautology 1] \
+	    [sys tautology a] [sys tautology !a] \
+	    [sys unset a !a] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {0 1 0 0 {} 2}
+}
+
+test bdd-32.1 {support - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys support
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-32.2 {support - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys support garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-32.3 {support} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ d a b
+	sys ^ e a c
+	sys ^ f b c
+	sys ^3 g a b c
+    }
+    -body {
+	list \
+	    [sys support 0] [sys support 1] \
+	    [sys support a] [sys support !a] \
+	    [sys support b] [sys support !b] \
+	    [sys support c] [sys support !c] \
+	    [sys support d] [sys support e] [sys support f] [sys support g] \
+	    [sys unset a !a b !b c !c d e f g] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {{} {} 0 0 1 1 2 2 {0 1} {0 2} {1 2} {0 1 2} {} 2}
+}
+
+test bdd-33.1 {beadcount - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys beadcount
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-33.2 {beadcount - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys beadcount garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-33.3 {beadcount} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+	sys nthvar b 1; sys notnthvar !b 1
+	sys nthvar c 2; sys notnthvar !c 2
+	sys ^ d a b
+	sys ^ e a c
+	sys ^ f b c
+	sys ^3 g a b c
+    }
+    -body {
+	list \
+	    [sys beadcount 0] [sys beadcount 1] \
+	    [sys beadcount a] [sys beadcount !a] \
+	    [sys beadcount b] [sys beadcount !b] \
+	    [sys beadcount c] [sys beadcount !c] \
+	    [sys beadcount d] [sys beadcount e] \
+	    [sys beadcount f] [sys beadcount g] \
+	    [sys unset a !a b !b c !c d e f g] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {0 0 1 1 1 1 1 1 3 3 3 5 {} 2}
+}
+
 test bdd-34.1 {foreach_fullsat} {*}{
     -body {
 	set result {}
