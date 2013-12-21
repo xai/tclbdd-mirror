@@ -2944,7 +2944,53 @@ test bdd-31.3 {tautology} {*}{
     -result {0 1 0 0 {} 2}
 }
 
-test bdd-32.1 {support - wrong # args} {*}{
+test bdd-32.1 {satisfiable - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys satisfiable
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-32.2 {satisfiable - bad expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys satisfiable garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result \
+	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-32.3 {satisfiable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys notnthvar !a 0
+    }
+    -body {
+	list \
+	    [sys satisfiable 0] [sys satisfiable 1] \
+	    [sys satisfiable a] [sys satisfiable !a] \
+	    [sys unset a !a] [sys gc]
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {0 1 1 1 {} 2}
+}
+
+test bdd-33.1 {support - wrong # args} {*}{
     -setup {
 	bdd::system create sys
     }
@@ -2959,7 +3005,7 @@ test bdd-32.1 {support - wrong # args} {*}{
     -returnCodes error
 }
 
-test bdd-32.2 {support - bad expr} {*}{
+test bdd-33.2 {support - bad expr} {*}{
     -setup {
 	bdd::system create sys
     }
@@ -2973,7 +3019,7 @@ test bdd-32.2 {support - bad expr} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
-test bdd-32.3 {support} {*}{
+test bdd-33.3 {support} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -2999,7 +3045,7 @@ test bdd-32.3 {support} {*}{
     -result {{} {} 0 0 1 1 2 2 {0 1} {0 2} {1 2} {0 1 2} {} 2}
 }
 
-test bdd-33.1 {beadcount - wrong # args} {*}{
+test bdd-34.1 {beadcount - wrong # args} {*}{
     -setup {
 	bdd::system create sys
     }
@@ -3014,7 +3060,7 @@ test bdd-33.1 {beadcount - wrong # args} {*}{
     -returnCodes error
 }
 
-test bdd-33.2 {beadcount - bad expr} {*}{
+test bdd-34.2 {beadcount - bad expr} {*}{
     -setup {
 	bdd::system create sys
     }
@@ -3028,7 +3074,7 @@ test bdd-33.2 {beadcount - bad expr} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
-test bdd-33.3 {beadcount} {*}{
+test bdd-34.3 {beadcount} {*}{
     -setup {
 	bdd::system create sys
 	sys nthvar a 0; sys notnthvar !a 0
@@ -3055,7 +3101,7 @@ test bdd-33.3 {beadcount} {*}{
     -result {0 0 1 1 1 1 1 1 3 3 3 5 {} 2}
 }
 
-test bdd-34.1 {foreach_fullsat} {*}{
+test bdd-35.1 {foreach_fullsat} {*}{
     -body {
 	set result {}
 	bdd::foreach_fullsat s {6 3 0 7 4 1} {1 0 3 1 6 0 7 0} {
@@ -3070,7 +3116,7 @@ test bdd-34.1 {foreach_fullsat} {*}{
     -result {0 2 2 2 0 3 2 3}
 }
 
-test bdd-34.2 {foreach_fullsat - return} {*}{
+test bdd-35.2 {foreach_fullsat - return} {*}{
     -setup {
 	proc x {} {
 	    bdd::foreach_fullsat s {6 3 0 7 4 1} {1 0 3 1 6 0 7 0} {
@@ -3091,7 +3137,7 @@ test bdd-34.2 {foreach_fullsat - return} {*}{
     -result {0 2}
 }
 
-test bdd-34.3 {foreach_fullsat - break} {*}{
+test bdd-35.3 {foreach_fullsat - break} {*}{
     -body {
 	set result {}
 	bdd::foreach_fullsat s {6 3 0 7 4 1} {1 0 3 1 6 0 7 0} {
@@ -3109,7 +3155,7 @@ test bdd-34.3 {foreach_fullsat - break} {*}{
     -result {0 2 2 2}
 }
 
-test bdd-34.4 {foreach_fullsat - continue} {*}{
+test bdd-35.4 {foreach_fullsat - continue} {*}{
     -body {
 	set result {}
 	bdd::foreach_fullsat s {6 3 0 7 4 1} {1 0 3 1 6 0 7 0} {
@@ -3127,7 +3173,7 @@ test bdd-34.4 {foreach_fullsat - continue} {*}{
     -result {0 2 2 2 2 3}
 }
 
-test bdd-34.5 {foreach_fullsat - code 6} {*}{
+test bdd-35.5 {foreach_fullsat - code 6} {*}{
     -body {
 	set result {}
 	list [catch {
