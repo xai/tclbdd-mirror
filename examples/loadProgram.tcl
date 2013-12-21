@@ -85,9 +85,9 @@ proc analyzeProgram {program db} {
 	[bdd::fddd::concatenate \
 	     [bdd::fddd::domain v $vbits bigendian] \
 	     [bdd::fddd::interleave \
-		  [bdd::fddd::domain st  $stbits littleendian] \
-		  [bdd::fddd::domain st2 $stbits littleendian] \
-		  [bdd::fddd::domain st3 $stbits littleendian]]]
+		  [bdd::fddd::domain st  $stbits bigendian] \
+		  [bdd::fddd::domain st2 $stbits bigendian] \
+		  [bdd::fddd::domain st3 $stbits bigendian]]]
     
     $db relation reads st v
     $db relation writes st v

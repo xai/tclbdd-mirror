@@ -4,8 +4,8 @@ proc profile! {db var} {
     puts "$var: [$db profile $var]"
 }
 
-# interp alias {} profile {} profile!
-proc profile args {}
+interp alias {} profile {} profile!
+# proc profile args {}
 
 source [file join [file dirname [info script]] program1.tcl]
 
