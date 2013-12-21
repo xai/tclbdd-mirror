@@ -3,16 +3,17 @@ source [file join [file dirname [info script]] loadProgram.tcl]
 proc profile! {db var} {
     puts "$var: [$db profile $var]"
 }
-interp alias {} profile {} profile!
+
+# interp alias {} profile {} profile!
+proc profile args {}
 
 source [file join [file dirname [info script]] program1.tcl]
 
 set vars [analyzeProgram $program db]
 
-puts "profiles:"
-puts "reads:  [db profile reads]"
-puts "writes: [db profile writes]"
-puts "seq:    [db profile seq]"
+profile db reads
+profile db writes
+profile db seq
 
 #############################################################################
 
@@ -119,6 +120,7 @@ proc query2 {db i} [subst {
 # Report on reachability analysis
 
 reachability db
+
 puts [format {%-16s %2s  %-32s %-16s} PRODUCERS {} INSTRUCTIONS CONSUMERS]
 set i 0
 foreach stmt $program {
@@ -138,6 +140,7 @@ foreach stmt $program {
 	    [lindex $vars [expr {2*[dict get $result v]}]] \
 	    [dict get $result st2]
     }
+
     puts [format "%-16s %2d: %-32s %-16s" \
 	      [lsort -stride 2 -index 0 -ascii \
 		   [lsort -stride 2 -index 1 -integer $flowsto]] \

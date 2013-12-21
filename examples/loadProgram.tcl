@@ -76,11 +76,8 @@ proc pass2 {program vars labels} {
 proc analyzeProgram {program db} {
     # pass 1 - find variables, resolve labels, calculate domain sizes
     lassign [pass1 $program] vars labels
-    puts [list variables: {*}$vars]
-    puts [list labels: {*}$labels]
     set stbits [fdbits [llength $program]]
     set vbits [fdbits [dict size $vars]]
-    puts "statements need $stbits bits, vars need $vbits bits"
 
     # Create the program database
     
@@ -98,9 +95,6 @@ proc analyzeProgram {program db} {
 
     # pass 2 - discover 'reads', 'writes', 'seq' relations
     lassign [pass2 $program $vars $labels] reads writes seq
-    puts "reads: $reads"
-    puts "writes: $writes"
-    puts "seq: $seq"
 
     # TODO - Load incrementally in pass 2
     
