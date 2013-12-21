@@ -1680,6 +1680,9 @@ Quantify(
 				/* Quantifier to apply */
     Tcl_HashEntry* entryPtr;	/* Pointer to the hash entry for
 				 * a cached result */
+    BDD_VariableIndex level;	/* Level from current bead */
+    BDD_BeadIndex low;		/* Low branch from current bead */
+    BDD_BeadIndex high;		/* High branch from current bead */
 
     /* Check for a cached result */
     entryPtr = Tcl_CreateHashEntry(&(sysPtr->quantifyCache),
@@ -1692,6 +1695,9 @@ Quantify(
 
     for (;;) {
 	Bead* beadPtr = sysPtr->beads + u;
+	level = beadPtr->level;
+	low = beadPtr->low;
+	high = beadPtr->high;
 	if (n == 0 || *v >= sysPtr->beads[0].level) {
 	    /*
 	     * No variables remain to quantify. Simply return the expression
@@ -1700,25 +1706,25 @@ Quantify(
 	    ++beadPtr->refCount;
 	    r = u;
 	    break;
-	} else if (beadPtr->level < *v) {
+	} else if (level < *v) {
 	    /*
 	     * The current variable in the expression is unquantified.
 	     * Quantify the two subexpressions and make the result
 	     */
-	    l = Quantify(sysPtr, n, v, beadPtr->low);
-	    h = Quantify(sysPtr, n, v, beadPtr->high);
-	    r = BDD_MakeBead(sysPtr, beadPtr->level, l, h);
+	    l = Quantify(sysPtr, n, v, low);
+	    h = Quantify(sysPtr, n, v, high);
+	    r = BDD_MakeBead(sysPtr, level, l, h);
 	    BDD_UnrefBead(sysPtr,h);
 	    BDD_UnrefBead(sysPtr,l);
 	    break;
-	} else if (beadPtr->level == *v) {
+	} else if (level == *v) {
 	    /*
 	     * The current variable in the expression is quantified.
 	     * Quantify the two subexpressions with respect to the
 	     * remaining variables and then apply the combining operation.
 	     */
-	    l = Quantify(sysPtr, n-1, v+1, beadPtr->low);
-	    h = Quantify(sysPtr, n-1, v+1, beadPtr->high);
+	    l = Quantify(sysPtr, n-1, v+1, low);
+	    h = Quantify(sysPtr, n-1, v+1, high);
 	    sysPtr->applyOp = q;
 	    r = Apply(sysPtr, l, h);
 	    BDD_UnrefBead(sysPtr,h);
