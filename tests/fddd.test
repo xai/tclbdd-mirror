@@ -1,9 +1,12 @@
-# bdd.test --
+# fddd.test --
 #
 #       Tests for Finite Domain Decision Diagrams (FDDD's)
 #
 # Copyright (c) 2013 by Kevin B. Kenny.
 
+package require tcltest 2
+namespace import -force ::tcltest::*
+tcltest::loadTestedCommands
 package require tclbdd::fddd
 
 test fddd-1.1 {load term - wrong # args} {*}{
@@ -619,6 +622,9 @@ test fddd-5.9 {replace} {
     }
     -result {1 {} 2}
 }
+
+cleanupTests
+return
 
 # Local Variables:
 # mode: tcl

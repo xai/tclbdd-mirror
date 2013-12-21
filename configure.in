@@ -179,4 +179,7 @@ TEA_PROG_TCLSH
 # which require substituting th AC variables in.  Include these here.
 #--------------------------------------------------------------------
 
-AC_OUTPUT([Makefile pkgIndex.tcl])
+LIBRARY_SRCDIR=$(${CYGPATH} ${srcdir}/library)
+AC_SUBST(LIBRARY_SRCDIR)
+
+AC_OUTPUT([Makefile pkgIndex.tcl loadscript.tcl])

@@ -308,7 +308,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CYGPATH EXEEXT PKG_LIB_FILE PKG_STUB_LIB_FILE PKG_STUB_SOURCES PKG_STUB_OBJECTS PKG_TCL_SOURCES PKG_HEADERS PKG_INCLUDES PKG_LIBS PKG_CFLAGS TCL_VERSION TCL_PATCH_LEVEL TCL_BIN_DIR TCL_SRC_DIR TCL_LIB_FILE TCL_LIB_FLAG TCL_LIB_SPEC TCL_STUB_LIB_FILE TCL_STUB_LIB_FLAG TCL_STUB_LIB_SPEC CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC OBJEXT CLEANFILES TCL_LIBS TCL_DEFS TCL_EXTRA_CFLAGS TCL_LD_FLAGS TCL_SHLIB_LD_LIBS CPP INSTALL SET_MAKE RANLIB ac_ct_RANLIB EGREP MATH_LIBS PKG_SOURCES PKG_OBJECTS TCL_INCLUDES TCL_THREADS SHARED_BUILD AR ac_ct_AR CELIB_DIR RC ac_ct_RC CFLAGS_DEBUG CFLAGS_OPTIMIZE CFLAGS_WARNING STLIB_LD SHLIB_LD SHLIB_LD_LIBS SHLIB_CFLAGS LD_LIBRARY_PATH_VAR CFLAGS_DEFAULT LDFLAGS_DEFAULT TCL_DBGX MAKE_LIB MAKE_SHARED_LIB MAKE_STATIC_LIB MAKE_STUB_LIB RANLIB_STUB VC_MANIFEST_EMBED_DLL VC_MANIFEST_EMBED_EXE TCLSH_PROG LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CYGPATH EXEEXT PKG_LIB_FILE PKG_STUB_LIB_FILE PKG_STUB_SOURCES PKG_STUB_OBJECTS PKG_TCL_SOURCES PKG_HEADERS PKG_INCLUDES PKG_LIBS PKG_CFLAGS TCL_VERSION TCL_PATCH_LEVEL TCL_BIN_DIR TCL_SRC_DIR TCL_LIB_FILE TCL_LIB_FLAG TCL_LIB_SPEC TCL_STUB_LIB_FILE TCL_STUB_LIB_FLAG TCL_STUB_LIB_SPEC CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC OBJEXT CLEANFILES TCL_LIBS TCL_DEFS TCL_EXTRA_CFLAGS TCL_LD_FLAGS TCL_SHLIB_LD_LIBS CPP INSTALL SET_MAKE RANLIB ac_ct_RANLIB EGREP MATH_LIBS PKG_SOURCES PKG_OBJECTS TCL_INCLUDES TCL_THREADS SHARED_BUILD AR ac_ct_AR CELIB_DIR RC ac_ct_RC CFLAGS_DEBUG CFLAGS_OPTIMIZE CFLAGS_WARNING STLIB_LD SHLIB_LD SHLIB_LD_LIBS SHLIB_CFLAGS LD_LIBRARY_PATH_VAR CFLAGS_DEFAULT LDFLAGS_DEFAULT TCL_DBGX MAKE_LIB MAKE_SHARED_LIB MAKE_STATIC_LIB MAKE_STUB_LIB RANLIB_STUB VC_MANIFEST_EMBED_DLL VC_MANIFEST_EMBED_EXE TCLSH_PROG LIBRARY_SRCDIR LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -11294,7 +11294,10 @@ echo "${ECHO_T}${TCLSH_PROG}" >&6
 # which require substituting th AC variables in.  Include these here.
 #--------------------------------------------------------------------
 
-                    ac_config_files="$ac_config_files Makefile pkgIndex.tcl"
+LIBRARY_SRCDIR=$(${CYGPATH} ${srcdir}/library)
+
+
+                              ac_config_files="$ac_config_files Makefile pkgIndex.tcl loadscript.tcl"
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
 # tests run on this system so they can be shared between configure
@@ -11848,6 +11851,7 @@ do
   # Handling of arguments.
   "Makefile" ) CONFIG_FILES="$CONFIG_FILES Makefile" ;;
   "pkgIndex.tcl" ) CONFIG_FILES="$CONFIG_FILES pkgIndex.tcl" ;;
+  "loadscript.tcl" ) CONFIG_FILES="$CONFIG_FILES loadscript.tcl" ;;
   *) { { echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
 echo "$as_me: error: invalid argument: $ac_config_target" >&2;}
    { (exit 1); exit 1; }; };;
@@ -12000,6 +12004,7 @@ s,@RANLIB_STUB@,$RANLIB_STUB,;t t
 s,@VC_MANIFEST_EMBED_DLL@,$VC_MANIFEST_EMBED_DLL,;t t
 s,@VC_MANIFEST_EMBED_EXE@,$VC_MANIFEST_EMBED_EXE,;t t
 s,@TCLSH_PROG@,$TCLSH_PROG,;t t
+s,@LIBRARY_SRCDIR@,$LIBRARY_SRCDIR,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t
 s,@LTLIBOBJS@,$LTLIBOBJS,;t t
 CEOF
