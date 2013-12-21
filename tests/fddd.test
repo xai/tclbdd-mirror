@@ -307,6 +307,7 @@ test fddd-2.10 {interleave of concatenated} {*}{
 }
 
 test fddd-3.1 {reader - 1 column} {*}{
+    -constraints obsolete
     -setup {
 	bdd::system create sys
 	set layout \
@@ -334,6 +335,7 @@ test fddd-3.1 {reader - 1 column} {*}{
 }
 
 test fddd-3.2 {reader - 2 columns} {
+    -constraints obsolete
     -setup {
 	bdd::system create sys
 	set layout \
@@ -622,6 +624,7 @@ test fddd-5.9 {replace} {
     }
     -result {1 {} 2}
 }
+
 
 cleanupTests
 return

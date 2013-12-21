@@ -46,31 +46,32 @@ proc fdbits {numvals} {
 
 # Calculates 'reads', 'writes' and 'seq'
 
-proc pass2 {program vars labels} {
+proc pass2 {db program vars labels} {
     set i 0
     foreach insn $program {
 	if {[regexp {^(_[[:alnum:]_]+):$} [lindex $insn 0] label]} {
 	    set insn [lrange $insn[set insn {}] 1 end]
 	}
 	if {[lindex $insn 1] eq {:=}} {
-	    lappend writes $i [dict get $vars [lindex $insn 0]]
+	    loadWrites $i [dict get $vars [lindex $insn 0]]
 	    set insn [lrange $insn[set insn {}] 2 end]
 	}
 	foreach token $insn {
 	    if {[regexp {^[[:alpha:]][[:alnum:]_]*$} $token]} {
-		lappend reads $i [dict get $vars $token]
+		loadReads $i [dict get $vars $token]
 	    }
 	}
 	if {[lindex $insn 0] eq {*GOTO}} {
-	    lappend seq $i [dict get $labels [lindex $insn 1]]
+	    loadSeq $i [dict get $labels [lindex $insn 1]]
 	} elseif {[lindex $insn 0] eq {*IF} && [lindex $insn 2] eq {*GOTO}} {
-	    lappend seq $i [dict get $labels [lindex $insn 3]] $i [expr {$i+1}]
+	    loadSeq $i [dict get $labels [lindex $insn 3]] 
+	    loadSeq $i [expr {$i+1}]
 	} else {
-	    lappend seq $i [expr {$i+1}]
+	    loadSeq $i [expr {$i+1}]
 	}
 	incr i
     }
-    return [list $reads $writes $seq]
+    return
 }
     
 proc analyzeProgram {program db} {
@@ -93,14 +94,12 @@ proc analyzeProgram {program db} {
     $db relation writes st v
     $db relation seq st st2
 
-    # pass 2 - discover 'reads', 'writes', 'seq' relations
-    lassign [pass2 $program $vars $labels] reads writes seq
+    interp alias {} loadReads {} {*}[$db loader reads]
+    interp alias {} loadWrites {} {*}[$db loader writes]
+    interp alias {} loadSeq {} {*}[$db loader seq]
 
-    # TODO - Load incrementally in pass 2
-    
-    $db load reads $reads
-    $db load writes $writes
-    $db load seq $seq
+    # pass 2 - discover 'reads', 'writes', 'seq' relations
+    pass2 db $program $vars $labels
 
     # Return the variable dictionary, since it is not readily recoverable
 
