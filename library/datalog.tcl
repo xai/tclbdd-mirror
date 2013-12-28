@@ -11,10 +11,15 @@
 #------------------------------------------------------------------------------
 
 source [file dirname [info script]]/coroutine_iterator.tcl; # TEMP
+source [file dirname [info script]]/coroutine_corovar.tcl; # TEMP
+
 
 package require Tcl 8.6
+package require coroutine::corovar 1.0
 package require coroutine::iterator 1.0
 package require grammar::aycock 1.0
+
+namespace import coroutine::corovar::corovar
 
 namespace eval bdd {
     namespace eval datalog {
@@ -392,6 +397,8 @@ proc bdd::datalog::scc {v outedges script} {
 
 proc bdd::datalog::SCC_coro {outedges} {
     # outedges is coroutine-global
+
+    # Coroutine-global variables:
     set index 0;		# Coroutine global: Current node's index
     set S {};			# Coroutine global: Stack of nodes on the
     				# path from a root to the current node
@@ -428,17 +435,13 @@ proc bdd::datalog::SCC_coro {outedges} {
 # and strongly connected components.
 
 proc bdd::datalog::SCC_coro_worker {v edges} {
-    upvar #1 outedges outedges;	# Coroutine global: adjacency lists
-    upvar #1 index index;	# Coroutine global: index for the next
-    				# unexamined node
-    upvar #1 S S;		# Coroutine global: stack of nodes traversed
-    				# from a root
-    upvar #1 vindex vindex;	# Coroutine global: dictionary whose keys are
-				# names of nodes and whose values are node
-    				# indices
-    upvar #1 lowlink lowlink;	# Coroutine global: dictionary whose keys are
-				# names of nodes and whose values are the
-    				# indices of the other end of back edges
+    corovar outedges;		# Adjacency lists
+    corovar index;		# Index of next unexamined node
+    corovar S;			# Stack of nodes traversed from root to current
+    corovar vindex;		# Dictionary mapping node to node index
+    corovar lowlink;		# Dictionary mapping node to the other
+    				# end of a back edge.
+
 
     # Set the index and lowlink of the node to point to itself, and put
     # the node on the stack.
