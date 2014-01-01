@@ -88,63 +88,60 @@ set bdd::datalog::parser \
     # A program comprises a list of statements followed optionally by
     # a query
 
-    program	::=	statements 
-    {
-	linsert [lindex $_ 0] 0 PROGRAM
-    }
-    program	::=	statements query
-    {
-	linsert [linsert [lindex $_ 0] end [lindex $_ 1]] 0 PROGRAM
-    }
-    statements	::=	statements statement
-    {
-	linsert [lindex $_ 0] end [lindex $_ 1]
-    }
-    statements	::=
-    {
-	concat
-    }
+    program	::=	statements 		{}
+    program	::=	statements query	{}
+    statements	::=	statements statement	{}
+    statements	::=			    	{}
 
-    # A statement is either an assertion or retraction of a clause
+    # A statement is either an assertion or retraction of a clause.
+    # A clause is either a rule or a fact. We refactor this into
+    # the four cases, 'ruleAssertion', 'factAssertion', 'ruleRetraction'
+    # and 'factRetraction' because this is no more complicated and
+    # gives slightly easier data manipulation
 
-    statement	::=	assertion		{}
-    statement	::=	retraction		{}
-    assertion	::=	clause .
+    statement	::=	factAssertion		{}
+    statement	::=	factRetraction		{}
+    statement   ::=	ruleAssertion		{}
+    statement	::=	ruleRetraction		{}
+
+    factAssertion ::=	fact .
     {
-	list ASSERTION [lindex $_ 0]
+	$clientData assertFact [lindex $_ 0]
     }
-    retraction	::=	clause ~
+    factRetraction ::= fact ~
     {
-	list RETRACTION [lindex $_ 0]
+	$clientData retractFact [lindex $_ 0]
+    }
+    ruleAssertion ::= rule .
+    {
+	$clientData assertRule [lindex $_ 0]
+    }
+    ruleRetraction ::= rule ~
+    {
+	$clientData retractRule [lindex $_ 0]
     }
 
     # A query gives a literal to match
 
     query	::=	pliteral ?
     {
-	list QUERY [lindex $_ 0]
+	$clientData addQuery [lindex $_ 0]
     }
-
-    # A clause asserts a fact or gives a rule for deducing a fact
-
-    clause	::=	equivalence		{}
-    clause	::=	fact			{}
-    clause	::=	rule			{}
 
     # A fact is just a non-negated literal
 
-    fact	::=	pliteral
-    {
-	list FACT [lindex $_ 0]
-    }
+    fact	::=	pliteral		{}
 
     # A rule comprises a head (a fact to be deduced) and a body
     # (the facts to deduce it from)
 
     rule	::=	head :- body
     {
-	linsert [lindex $_ 2] 0 RULE [lindex $_ 0]
+	linsert [lindex $_ 2] 0 [lindex $_ 0]
     }
+
+    # The head is a single, non-negated literal
+
     head	::=	pliteral		{}
 
     # The body is a set of comma-separated, possibly negated conditions
@@ -226,118 +223,510 @@ set bdd::datalog::parser \
     }
 } {}]]
 
-# bdd::datalog::getrules --
+# bdd::datalog::prettyprint-rule --
 #
-#	Walk the parse tree of a Datalog program and extract only the rules
+#	Formats a rule for printing.
 #
 # Usage:
-#	bdd::datalog::getrules $parseTree
+#	bdd::datalog::prettyprint-rule $rule
 #
 # Parameters:
-#	parseTree - Parse tree resulting from running the Datalog parser.
-#
-# Results:
-#	Returns a list of the rules, with the RULE flag stripped.
-#	Each rule is therefore a list of literals and equalities, with
-#	the first element representing the head and the rest representing
-#	the body.
+#	rule - Rule in the parse tree
 
-proc bdd::datalog::getrules {parseTree} {
-    switch -exact -- [lindex $parseTree 0] {
-	PROGRAM -
-	ASSERTION {
-	    set results {}
-	    foreach part [lrange $parseTree 1 end] {
-		set sub [getrules $part]
-		lappend results {*}$sub
+proc bdd::datalog::prettyprint-rule {rule} {
+    set s [prettyprint-literal [lindex $rule 0]]
+    set sep :-
+    foreach condition [lrange $rule 1 end] {
+	append s $sep [prettyprint-condition $condition]
+	set sep ,
+    }
+    return $s
+}
+proc bdd::datalog::prettyprint-condition {condition} {
+    switch -exact [lindex $condition 0] {
+	EQUALITY {
+	    set s [prettyprint-variable [lindex $condition 1]]
+	    append s = [prettyprint-variable [lindex $condition 2]]
+	}
+	NOT {
+	    set s !
+	    append s [prettyprint-literal [lindex $condition 1]]
+	}
+	LITERAL {
+	    set s [prettyprint-literal $condition]
+	}
+	default {
+	    error "Expected condition and got $condition"
+	}
+    }
+    return $s
+}
+proc bdd::datalog::prettyprint-literal {literal} {
+    # FIXME: May need to quote s (and backslashify its content)
+    set s [lindex $literal 1]
+    if {[llength $literal] > 2} {
+	set sep \(
+	foreach t [lrange $literal 2 end] {
+	    append s $sep [prettyprint-term $t]
+	    set sep ,
+	}
+	append s \)
+    }
+    return $s
+}
+
+proc bdd::datalog::prettyprint-term {term} {
+    switch -exact [lindex $term 0] {
+	VARIABLE {
+	    return [prettyprint-variable $term]
+	}
+	CONSTANT {
+	    return [prettyprint-constant $term]
+	}
+	default {
+	    error "expected term and got $term"
+	}
+    }
+}
+proc bdd::datalog::prettyprint-constant {constant} {
+    switch -exact [lindex $constant 1 0] {
+	INTEGER {
+	    return [lindex $constant 1 1]
+	}
+	TCLVAR {
+	    return \$[list [lindex $constant 1 1]]
+	}
+    }
+}
+proc bdd::datalog::prettyprint-variable {variable} {
+    # FIXME: May need to quote and backslashify
+    return [lindex $variable 1]
+}
+
+# bdd::datalog::program --
+#
+#	Class that exists to hold a program description under construction
+#	from the parser.
+
+oo::class create bdd::datalog::program {
+
+    # 'rules' is a list of all the rules in the program, expressed as
+    #         parse trees.
+    # 'rulesForPredicate' is a dictionary whose keys are predicate names
+    #         and whose values are lists of rules that assign a value to the
+    #	      given predicate. The lists consist of integer indices into
+    #         the 'rules' list.
+    # 'factsForPredicate' is a dictionary whose keys are predicate names
+    #         and whose values are lists of facts that assign a value to the
+    #         given predicate
+    # 'outEdgesForPredicate' is a dictionary whose keys are predicate names
+    #         and whose values are edges that describe the rules that depend
+    #         on the given predicate. Each edge is a tuple:
+    #             [0] The name of the predicate being tracked
+    #             [1] The name of the predicate on the left hand side of
+    #                 the dependent rule
+    #		  [2] 1 if the predicate is negated in the rule, 0 otherwise
+    #             [3] The dependent rule, as a parse tree
+    #             [4] The index of the predicate being tracked within the
+    #                 conditions on the right hand side of the dependent rule.
+    # 'query' is a literal giving the query at the end of the program
+    #         (if any)
+
+    variable \
+	rules \
+	rulesForPredicate \
+	factsForPredicate \
+	outEdgesForPredicate \
+	query
+
+    # Constructor -
+    #
+    #	Creates an empty program.
+
+    constructor {} {
+	set rules {}
+	set rulesForPredicate {}
+	set factsForPredicate {}
+	set outEdgesForPredicate {}
+    }
+
+    # assertRule -
+    #
+    #	Semantic action called from the parser when a rule is being asserted
+    #
+    # Parameters:
+    #	rule - Parse tree of the rule
+    #
+    # Results:
+    #	None
+    #
+    # Side effects:
+    #	Adds the rule to the rule list, and the list of rules that compute
+    #   its left-hand side. For each predicate on the right-hand side, adds
+    #	an edge linking the dependency to the rule.
+
+    method assertRule {rule} {
+
+	# Put the rule in the rule list and the list of rules for
+	# the predicate on the left-hand side
+
+	set ruleIndex [llength $rules]
+	set lhPredicate [lindex $rule 0 1]
+	lappend rules $rule
+	dict lappend rulesForPredicate $lhPredicate $ruleIndex
+
+	# Examine the conditions on the right hand side
+
+	set i 0
+	foreach condition [lrange $rule 1 end] {
+	    incr i
+	    switch -exact -- [lindex $condition 0] {
+		EQUALITY { 	# does not create a dependency
+		    continue
+		}
+		LITERAL {
+		    set dependency [lindex $condition 1]
+		    set not 0
+		}
+		NOT {
+		    set dependency [lindex $condition 1 1]
+		    set not 1
+		}
+		default {
+		    error "[info level 0] - can't happen"
+		}
 	    }
-	    return $results
+
+	    # Put the dependency into the edges for the LHS predicate
+
+	    dict lappend outEdgesForPredicate $dependency \
+		[list $dependency $lhPredicate $not $rule $i]
 	}
-	RULE {
-	    return [list [lrange $parseTree 1 end]]
+
+	# Make sure that the predicates of all rules appear in
+	# the 'outEdgesForPredicate' dictionary.
+
+	if {![dict exists $outEdgesForPredicate $lhPredicate]} {
+	    dict set outEdgesForPredicate $lhPredicate {}
 	}
-	RETRACTION {
-	    error "Retractions are not currently supported."
+
+	return
+    }
+
+    # Method: retractRule
+    #
+    #	Retracts a rule
+    #
+    # NOT IMPLEMENTED
+
+    method retractRule {rule} {
+	return -code error "Retractions are not currently supported"
+    }
+
+    # Method: assertFact
+    #
+    #	Semantic action called from the parser when a program asserts
+    #   a fact.
+    #
+    # Parameters:
+    #	literal - The fact being asserted, expressed as a parse tree
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Adds the given fact to the list of facts for its predicate.
+
+    method assertFact {literal} {
+
+	# Add the fact to the list of facts for its predicate
+	set predicate [lindex $literal 1]
+	dict lappend factsForPredicate $predicate $literal
+    }
+
+    # Method: retractFact
+    #
+    #	Retracts a fact
+    #
+    # NOT IMPLEMENTED
+
+    method retractFact {literal} {
+	return -code error "Retractions are not currently supported"
+    }
+
+    # Method: addQuery
+    #
+    #	Adds a query to a program
+    #
+    # Parameters:
+    #	literal - The literal being queried.
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Sets the program's final query to the given query.
+
+    method addQuery {literal} {
+	set query $literal
+    }
+
+    # Method: planExecution
+    #
+    #	Develops an execution plan for the program
+    #
+    # Parameters:
+    #	None.
+    #
+    # Results:
+    #	TBD
+    #
+    # Errors:
+    #	Throws an error if the program is not stratifiable.
+    #
+    # Notes:
+    #	The general approach is that the predicate dependency graph is
+    #   broken up into strongly connected components. For each component,
+    #	in topologic order, if the component consists of a single predicate, 
+    #	code is generated for the facts and rules that assign values
+    #	to the predicate. If the component contains multiple predicates,
+    #	it contains at least one loop. A loop header is identified
+    #	heuristically, and an iteration is constructed to compute the
+    #	predicate that corresponds to it. That predicate is removed from
+    #	the component, and whatever remains of the component is extracted
+    #	as a new program and compiled to become the loop body.
+
+    method planExecution {} {
+
+	# Partition the program into strongly connected components.
+
+	set components {}
+	set i 0
+	bdd::datalog::scc c $outEdgesForPredicate {
+	    lappend components $c
 	}
-	default {		# Nothing else may contain a rule
+
+	# Iterate through the components, in dependency order, and
+	# plan their execution individually.
+	
+	foreach component [lreverse $components] {
+	    my planExecutionForComponent $component
+	}
+
+    }
+
+    # Method: planExecutionForComponent
+    #
+    #	Plans the execution for one strongly-connected component of a
+    #	program.
+    #
+    # Parameters:
+    #	component - List of predicates belonging to the component
+    #
+    # Results:
+    #	TBD
+    #
+    # Errors:
+    #	Throws an error if the program is not stratifiable.
+    
+    method planExecutionForComponent {component} {
+
+	set loops {}
+	foreach predicate $component {
+	    foreach fact [my getFactsForPredicate $predicate] {
+		# TODO - Implement this
+		puts "Compile fact: [::bdd::datalog::prettyprint-literal $fact]"
+	    }
+	    foreach ruleNo [my getRulesForPredicate $predicate] {
+		set rule [my getRule $ruleNo]
+		switch -exact -- [my ruleDependsOn $rule $component] {
+		    2 {
+			error "The program is not stratifiable.\
+                               Check the rule\n\
+                               [::bdd::datalog::prettyprint-rule $rule]"
+		    }
+		    1 {
+			lappend loops $rule
+		    }
+		    0 {
+			# TODO - Implement this
+			puts "Compile rule:\
+                              [::bdd::datalog::prettyprint-rule $rule]"
+		    }
+		}
+	    }
+	}
+	if {[llength $loops] != 0} {
+	    my planIteration $component $loops
+	}
+    }
+
+    # Method: planIteration
+    #
+    #	Plans an iteration pattern once a recursive component has been
+    #   identified.
+    #
+    # Parameters:
+    #   component - Set of predicates that need to be resolved.
+    #	loops - Set of rules that require iteration. All irrelevant rules
+    #           have been removed.
+    #
+    # Results:
+    #	TBD
+
+    method planIteration {component loops} {
+	# As a heuristic, iterate over the predicate whose in-degree
+	# most exceeds its out-degree. This is the predicate whose deletion
+	# will remove the most edges from the dependency graph
+
+	foreach rule $loops {
+	    set lhPredicate [lindex $rule 0 1]
+	    foreach condition [lrange $rule 1 end] {
+		switch -exact -- [lindex $condition 0] {
+		    EQUALITY {	# does not introduce a dependency
+			continue
+		    }
+		    NOT {
+			set rhPredicate [lindex $condition 1 1]
+		    }
+		    LITERAL {
+			set rhPredicate [lindex $condition 1]
+		    }
+		    default {
+			error "in [info level 0]: can't happen."
+		    }
+		}
+		if {[lsearch -exact $component $rhPredicate] >= 0} {
+		    dict incr delta $lhPredicate 1; # edge into lhPredicate
+		    dict incr delta $rhPredicate -1; # edge out of rhPredicate
+		}
+	    }
+	}
+	set maxDelta -Inf
+	dict for {pred d} $delta {
+	    if {$d > $maxDelta} {
+		set maxDelta $d
+		set toRemove $pred
+	    }
+	}
+	# TODO - Implement this
+	puts "Generate a loop header for testing convergence of $toRemove"
+	try {
+	    set loopBody [::bdd::datalog::program new]
+	    foreach rule $loops {
+		if {[lindex $rule 0 1] ne $toRemove} {
+		    $loopBody assertRule $rule
+		}
+	    }
+	    $loopBody planExecution
+	    foreach rule $loops {
+		if {[lindex $rule 0 1] eq $toRemove} {
+		    puts "Compile rule:\
+                              [::bdd::datalog::prettyprint-rule $rule]"
+		}
+	    }
+	    # TODO - Implement this
+	    puts "Close the loop on $toRemove"
+		    
+	} finally {
+	    $loopBody destroy
+	}
+    }
+
+    # Method: ruleDependsOn
+    #
+    #	Tests if a rule depends on one or more of a set of predicates.
+    #
+    # Parameters:
+    #	rule - Parse tree of the rule
+    #	predicates - List of predicate names
+    #
+    # Results:
+    #	Returns 2 if the rule depends on one of the predicates in negated
+    #   form, 1, if the rule depends on one of the predicates only in
+    #   non-negated form, 0 if the rule has no dependency on the predicates
+
+    method ruleDependsOn {rule predicates} {
+	set result 0
+	foreach condition [lrange $rule 1 end] {
+	    if {[set r [my conditionDependsOn $condition $predicates]]
+		> $result} {
+		set result $r
+	    }
+	}
+	return $result
+    }
+
+    # Method: conditionDependsOn
+    #
+    #	Tests if a condition depends on one or more of a set of predicates.
+    #
+    # Parameters:
+    #	rule - Parse tree of the condition
+    #	predicates - List of predicate names
+    #
+    # Results:
+    #	Returns 2 if the rule depends on one of the predicates in negated
+    #   form, 1, if the rule depends on one of the predicates only in
+    #   non-negated form, 0 if the rule has no dependency on the predicates
+
+    method conditionDependsOn {condition predicates} {
+	switch -exact -- [lindex $condition 0] {
+	    EQUALITY {
+		return false
+	    }
+	    NOT {
+		if {[my conditionDependsOn [lindex $condition 1] $predicates]} {
+		    return 2
+		} else {
+		    return 0
+		}
+	    }
+	    LITERAL {
+		if {[lsearch -exact $predicates [lindex $condition 1]] >= 0} {
+		    return 1
+		} else {
+		    return 0
+		}
+	    }
+	}
+    }
+
+    method getRule {ruleNo} {
+	return [lindex $rules $ruleNo]
+    }
+
+    method getRules {} {
+	return $rules
+    }
+
+    method getRulesFor {} {
+	return $rulesForPredicate
+    }
+
+    method getRulesForPredicate {predicate} {
+	if {[dict exists $rulesForPredicate $predicate]} {
+	    return [dict get $rulesForPredicate $predicate]
+	} else {
 	    return {}
 	}
     }
-}
 
-# bdd::datalog::pdg --
-#
-#	Forms the predicate dependency graph of a Datalog program,
-#	expressed as a list of edges whose head and tail labels are
-#	predicate names.
-#
-# Parameters:
-#	rules - Rules contained in the program
-#
-# Results:
-#	Returns a list of tuples: each tuple consists of
-#	  {dependent dependency negated rule} 
-#	where
-#	  * dependent is the name of the dependent predicate
-#	  * dependency is the name of the dependency
-#	  * negated is 1 if the dependency appears in the rule in negated form
-#	  * rule is a copy of the input rule
+    method getEdges {} {
+	return $outEdgesForPredicate
+    }
 
-proc bdd::datalog::pdg {rules} {
-    # extract the predicate dependency graph as an edge list from
-    # the rules of a Datalog program
-    set results {}
-    foreach rule $rules {
-	set body [lassign $rule head]
-	set dependent [lindex $head 1]; # LITERAL name term term ...
-	foreach condition $body {
-	    switch -exact -- [lindex $condition 0] {
-		EQUALITY {		# does not create a dependency
-		}
-		LITERAL {
-		    lappend result \
-			[list $dependent [lindex $condition 1] 0 $rule]
-		}		
-		NOT {		# {NOT {LITERAL foo ...}}
-		    lappend result \
-			[list $dependent [lindex $condition 1 1] 1 $rule]
-		}
-	    }
+    method getFacts {} {
+	return $factsForPredicate
+    }
+
+    method getFactsForPredicate {predicate} {
+	if {[dict exists $factsForPredicate $predicate]} {
+	    return [dict get $factsForPredicate $predicate]
+	} else {
+	    return {}
 	}
     }
-    return $result
-}
-
-# bdd::datalog::pdg-dicts
-#
-#	Inverts the edge set of the predicate dependency graph of a
-#	Datalog program into individual adjacency lists
-#
-# Parameters:
-#	pdg - Edge list of the predicate dependency graph
-#
-# Results:
-#
-#	Returns a list two dictionaries. The first is keyed by the
-#	dependent, and its values are lists of the edges that join it
-#	to its dependencies. The second is keyed by dependency, and
-#	its values are lists of edges joining the dependnts to it.
-
-proc bdd::datalog::pdg-dicts {pdg} {
-    set outedges {}
-    set inedges {}
-    foreach edge $pdg {
-	lassign $edge from to not
-	if {![dict exists $inedges $from]} {
-	    dict set inedges $from {}
-	}
-	dict lappend outedges $from $edge
-	if {![dict exists $outedges $to]} {
-	    dict set outedges $to {}
-	}
-	dict lappend inedges $to $edge
-    }
-    return [list $outedges $inedges]
 }
 
 # bdd::datalog::scc --
@@ -489,400 +878,34 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
     return
 }
 
-# bdd::datalog::indexSCCs --
-#
-#	Partitions the dependency graph of a Datalog program into strongly
-#	connected components, and partitions the adjacency lists by
-#	dependent component.
-#
-# Parameters:
-#	outedges - Dictionary containing the adjacency lists. The keys
-#		   of the dictionary are the names of predicates. The
-#		   values are lists of edges. Each edge is a tuple.
-#		   The first two elements of the tuple are the dependent
-#		   predicate and the dependency predicate. The remaining 
-#		   elements are not used in this procedure.
-#
-# Results:
-#	Returns two lists. The first is a list of the strongly connected
-#	components, each of which is represented as a sublist containing the
-#	names of predicates in the component. The second is a dictionary
-#	which for each predicate gives the predicate's position in the list
-#	of components.
+proc bdd::datalog::compileProgram {programText} {
 
-proc bdd::datalog::indexSCCs {outedges} {
-    # make the index of predicate->component index: output is componentList and
-    # componentIndex.
-    
-    set i 0
-    set componentIndex {}
-    set componentList {}
-    bdd::datalog::scc c $outedges {
-	foreach predicate $c {
-	    dict set componentIndex $predicate $i
-	}
-	puts "component $i: $c"
-	lappend componentList $c
-	incr i
+    variable parser
+
+    try {
+
+	set program [bdd::datalog::program new]
+
+	# Do lexical analysis of the program
+	lassign [lex $programText] tokens values
+	
+	# Parse the program
+	set parseTree [$parser parse $tokens $values $program]
+	
+	# Extract the facts, rules, and edges joining the rules from the parse
+	set facts [$program getFacts]
+	set rules [$program getRules]
+	set outedges [$program getEdges]
+	
+	$program planExecution
+
+    } finally {
+
+	$program destroy
+
     }
-    return [list $componentList $componentIndex]
-}
-
-# bdd::datalog::makeComponentEdges --
-#
-#	Given the partition of the predicate dependency graph into strongly
-#	connected components, makes adjacency lists between the components,
-#	each of which gives the predicate dependencies that relate
-#	the component pair.
-#
-# Parameters:
-#	componentList - List of the components, each of which is a list of
-#		        predicate names.
-#	componentIndex - Dictionary whose keys are predicate names and whose
-#		         values are the positions of the predicates' components
-#			 in componentList
-#	outEdges - Edge list for the predicate dependency graph.
-#
-# Results:
-#	Returns a list of two items, componentEdges and componentEdgeNegated.
-#	componentEdges is a list whose positions are component numbers,
-#	and whose values are dictionaries whose keys dependent component
-#	numbers and whose values are lists of the edges that introduce
-#	the dependency. componentEdgeNegated is a two-level dictionary
-#	whose keys are the component numbers of dependent and dependency,
-#	and whose values exist if at least one dependency predicate
-#	appears in a dependent rule in negated form.
-#
-# Side effects:
-#	Throws an error if the Datalog program is not stratifiable.
-
-proc bdd::datalog::makeComponentEdges {componentList componentIndex outedges} {
-
-    set componentEdges {}
-    set componentEdgeNegated {}
-    set i 0
-    foreach component $componentList {
-	set curComponentEdges {}
-	foreach predicate $component {
-	    foreach edge [dict get $outedges $predicate] {
-		lassign $edge from to not rule
-		set destComponent [dict get $componentIndex $to]
-		if {$not && ($from == $to)} {
-		    # TODO - better error reporting
-		    error "The program is not stratifiable\
-                           because of rule $rule"
-		}
-		dict lappend curComponentEdges $destComponent $edge
-		if {$not} {
-		    dict set componentEdgeNegated $i $destComponent 1
-		}
-	    }
-	}
-	lappend componentEdges $curComponentEdges
-	incr i
-    }
-    return [list $componentEdges $componentEdgeNegated]
-}
-
-# bdd::datalog::stratify --
-#
-#	Given the strongly connected components of a Datalog program
-#	and the dependency relations between components, stratifies the
-#	program.
-#
-# Parameters:
-#	componentEdges - List whose positions are component numbers,
-#			 and whose values are dictionaries whose keys are the
-#                        component numbers of dependencies and whose
-#			 values are lists of edges that introduce the
-#			 dependency
-#	componentEdgeNegated - Two level dictionary whose values are dependent
-#			       component index and dependency component index,
-#			       whose values exist if at least one predicate
-#			       of the dependency appears in the dependent in
-#			       negated form.
-#
-# Results:
-#	Returns a dictionary whose keys are component indices and
-#	whose values are the stratum numbers to which they belong.
-
-proc bdd::datalog::stratify {componentEdges componentEdgeNegated} {
-    set stratum {}
-    set c 0
-    foreach e $componentEdges {
-	stratify1 stratum $componentEdges $componentEdgeNegated $c
-	incr c
-    }
-    return $stratum
-}
-
-# bdd::datalog::stratify1 --
-#
-#	Service procedure for the stratification pass
-#
-# Parameters:
-#	stratumVar - Name of the dictionary in caller's scope where the
-#		     stratum information is being accumulated. Keys
-#		     are component indices; values are strata.
-#	componentEdges - List whose positions are component numbers,
-#			 and whose values are dictionaries whose keys are the
-#                        component numbers of dependencies and whose
-#			 values are lists of edges that introduce the
-#			 dependency
-#	componentEdgeNegated - Two level dictionary whose values are dependent
-#			       component index and dependency component index,
-#			       whose values exist if at least one predicate
-#			       of the dependency appears in the dependent in
-#			       negated form.
-#	c - Component index being examined
-#
-# Results:
-#	Returns the stratum of component 'c'
-#
-# Side effects:
-#	Computes strata for the component and its descendants. Utilizes
-#	'stratumVar' as a cache so that each component is visited only
-#	once.
-#
-# If component A depends on component B, then stratum[A] >= stratum[B].
-# If at least one rule introducing the dependency has the dependent
-# predicate appearing in negated form, then stratum[A] > stratum[B].
-# The resulting strata are the ones that give stratum[X]>=0 for all X,
-# for which the values of stratum[X] are minimized for all X subject to
-# the constraints above.
-
-proc bdd::datalog::stratify1 {stratumVar 
-			      componentEdges
-			      componentEdgeNegated
-			      c} {
-    upvar 1 $stratumVar stratum
-    if {[dict exists $stratum $c]} {
-	return [dict get $stratum $c]
-    } else {
-	set edgeSet [lindex $componentEdges $c]
-	if {[dict size $edgeSet] == 0} {
-	    set s 0
-	} else {
-	    set s 1
-	    dict set stratum $c 1
-	    dict for {next edges} $edgeSet {
-		if {$next == $c} continue
-		set t [stratify1 stratum \
-			   $componentEdges $componentEdgeNegated $next]
-		incr t [dict exists $componentEdgeNegated $c $next]
-		if {$t > $s} {
-		    set s $t
-		}
-	    }
-	}
-	dict set stratum $c $s
-	return $s
-    }
-}
-
-# bdd::datalog::compsByStratum --
-#
-#	Distributes the strongly connected components of the predicate
-#	dependency graph by stratum after the program is stratified.
-#
-# Parameters:
-#	stratum - Dictionary whose keys are component numbers and whose
-#	          values are stratum numbers for the components
-#
-# Results:
-#	Returns a list with one element per stratum, in order by stratum
-#	number. The elements are the lists of components at each of the
-#	strata.
-
-proc bdd::datalog::compsByStratum {stratum} {
-    set bystratum {}
-    dict for {c s} $stratum {
-	while {$s >= [llength $bystratum]} {
-	    lappend bystratum {}
-	}
-	set comps [lindex $bystratum $s]; lset bystratum $s {}
-	lappend comps $c; lset bystratum $s $comps
-    }
-    return $bystratum
-}
-
-# bdd::datalog::sortComponents --
-#
-#	Topologically sorts the components at each stratum of the predicate 
-#	dependency graph to give the components' order of evaluation in
-#	the final generated code.
-#
-# Parameters:
-#	stratum - Dictionary whose keys are component numbers and whose
-#	          values are the stratum numbers for the components
-#	bystratum - List of lists. The sublists are the component indices
-#	            at each stratum.
-#	componentEdges - List of dictionaries. The positions in the
-#		         list are component indices. The keys of the
-#			 dictionaries are dependency component indices,
-#			 and the values are lists of edges inducing the
-#			 dependencies.
-#
-# Results:
-#	Returns 'bystratum' with the component numbers reordered into
-#	topologic numbering.
-
-proc bdd::datalog::sortComponents {stratum bystratum componentEdges} {
-    set s 0
-    foreach clist $bystratum {
-	set e {}
-	foreach comp $clist {
-	    dict for {comp2 edges} [lindex $componentEdges $comp] {
-		if {($comp2 != $comp) && [dict get $stratum $comp2] == $s} {
-		    puts "same-stratum edge $comp->$comp2"
-		    dict lappend e $comp2 [list $comp2 $comp]
-		}
-	    }
-	}
-	lset bystratum $s [bdd::datalog::topsort $clist $e]
-	incr s
-    }
-    return $bystratum
-}
-
-# bdd::datalog::topsort --
-#
-#	Topologic sort.
-#
-# Parameters:
-#	v - List of vertices in a DAG.
-#	e - Dictionary of edges in the graph. The keys are origin nodes.
-#	    The values are lists of edges. The edges are tuples, the first
-#	    two elements of which are the origin and destination vertices.
-#
-# Results:
-#	Returns a topologic ordering of v. If (v,w) is in E, then v
-#	precedes w in the ordering.
-#
-# This procedure separates the DAG into connected commponents, and
-# for each component, adds the vertices of the component to the
-# output in reverse postorder of the component's minimum spanning tree.
-
-proc bdd::datalog::topsort {v e} {
-    set result {}
-    set visited {}
-    foreach vertex $v {
-	topsort1 result visited $e $vertex
-    }
-    return [lreverse $result]
-}
-
-# bdd::datalog::topsort1 --
-#
-#	Service procedure for topologic sort.
-#
-# Parameters:
-#	resultVar - Name of a variable in the caller's scope where
-#		    the topologic order is being accumulated.
-#	visitedVar - Name of a dictionary in the caller's scope whose
-#		     keys are the names of vertices already visited.
-#	e - Dictionary of edges in the graph. The keys are origin nodes.
-#	    The values are lists of edges. The edges are tuples, the first
-#	    two elements of which are the origin and destination vertices.
-#	v - Name of the current vertex being visited.
-#
-# Results:
-#	None
-#
-# This procedure is called at least once for every vertex. It walks
-# the vertex's outbound edges recursively until it comes to either an
-# vertex already visited or to a sink. The vertices that it visits are
-# accumulated in postorder. (The calling procedure will reverse them).
-
-proc bdd::datalog::topsort1 {resultVar visitedVar e v} {
-    upvar 1 $resultVar result
-    upvar 1 $visitedVar visited
-    if {[dict exists $visited $v]} {
-	return
-    }
-    dict set visited $v {}
-    if {[dict exists $e $v]} {
-	foreach edge [dict get $e $v] {
-	    topsort1 result visited $e [lindex $edge 1]
-	}
-    }
-    lappend result $v
     return
-}
 
-proc bdd::datalog::compile {program} {
-    # Do lexical analysis of the program
-    lassign [::bdd::datalog::lex $program] tokens values
-    
-    # Parse the program
-    set parseTree [$::bdd::datalog::parser parse $tokens $values]
-
-    # Extract the rules from the parse tree
-    set rules [bdd::datalog::getrules $parseTree]
-    
-    # Form the predicate dependency graph of the rules
-    set pdg [bdd::datalog::pdg $rules]
-    
-    # Distribute the edges of the graph into separate adjacency lists
-    lassign [bdd::datalog::pdg-dicts $pdg] outedges inedges
-    
-    # Find the stongly connected components of the predicate dependency graph
-    lassign [bdd::datalog::indexSCCs $outedges] componentList componentIndex
-    
-    # Determine whether the predicate dependency graph is stratifiable, and 
-    # distribute the edges of the component graph into separate adjacency lists.
-    lassign [bdd::datalog::makeComponentEdges \
-		 $componentList $componentIndex $outedges] \
-	componentEdges componentEdgeNegated
-    
-    # TEMP - report component-component edges
-    set i 0
-    foreach edgeSet $componentEdges {
-	dict for {j edges} $edgeSet {
-	    puts "$i -> $j ([dict exists $componentEdgeNegated $i $j])"
-	}
-	incr i
-    }
-
-    # Stratify the predicate dependency graph
-    set stratum [bdd::datalog::stratify $componentEdges $componentEdgeNegated]
-    
-    # Distribute the components by stratum
-    set bystratum [bdd::datalog::compsByStratum $stratum]
-    
-    # Within each stratum, topologically sort the components so that
-    # dependencies precede their dependents
-    
-    set bystratum [bdd::datalog::sortComponents \
-		       $stratum $bystratum $componentEdges]
-
-    # TEMP - Report the components in final order of processing
-    set s 0
-    foreach clist $bystratum {
-	puts "stratum $s"
-	foreach c $clist {
-	    puts "component $c: [lindex $componentList $c]"
-	}
-	incr s
-    }
-    
-    # TEMP - Report the intra-component dependencies for the components 
-    if 0 {
-	set s 0
-	foreach clist $bystratum {
-	    foreach c $clist {
-		puts "component $c at stratum $s"
-		set edges [lindex $componentEdges $c]
-		puts "edges to [dict keys $edges]"
-		if {[dict exists $edges $c]} {
-		    foreach edge [dict get $edges $c] {
-			puts $edge
-		    }
-		}
-	    }
-	    incr s
-	}
-    }
 }
 
 package provide tclbdd::datalog 0.1
@@ -968,14 +991,16 @@ puts $parseTree2
 
 # Try compiling a program
 
-bdd::datalog::compile {
+bdd::datalog::compileProgram {
  
     % A false entry node (node 0) sets every variable and flows
     % to node 1. If any of its variables are reachable, those are
     % variables possibly used uninitialized in the program.
 
     writes(0, _).
+    writes(st,v) :- writes0(st,v).
     seq(0, 1).
+    seq(st,st2) :- seq0(st,st2).
 
     % flowspast(v,st,st2) means that control passes from the exit of st
     % to the entry of st2 without altering the value of v
@@ -1003,9 +1028,8 @@ bdd::datalog::compile {
     % Also do the bddbddb example. Only 1 stratum, but 2 loops in the larger SCC
 
     vP(v, h) :- vP0(v,h).
-    vP(v1,h) :- assign(v1,v2).
+    vP(v1,h) :- assign(v1,v2), vP(v2,h).
     hP(h1,f,h2) :- store(v1,f,v2), vP(v1,h1), vP(v2,h2).
     vP(v2,h2) :- load(v1,f,v2), vP(v1,h1), hP(h1,f,h2).
 
 }
-
