@@ -315,29 +315,6 @@ oo::class create bdd::fddd::database {
 	return
     }
 
-    # Private method: RelationMustExist
-    #
-    #	Makes sure that a given relation exists in the database
-    #
-    # Usage:
-    #	my RelationMustExist $name
-    #
-    # Parameters:
-    #	name - Name of a relation
-    #
-    # Results:
-    #	Returns an empty result if the relation exists. Causes the caller
-    #	to return an error if the relation is not found.
-
-    method RelationMustExist {name} {
-	if {![dict exists $m_relcolumns $name]} {
-	    return -level 2 -code error \
-		-errorcode [list FDDD RelationNotDefined $name] \
-		"relation \"$name\" is not defined in this database"
-	}
-	return
-    }
-
     # Private method: Varlist
     #	
     #	Enumerates the BDD variables that make up a relation.
@@ -382,8 +359,8 @@ oo::class create bdd::fddd::database {
     # The test executes in constant time.
 
     method === {rel1 rel2} {
-	my RelationMustExist $rel1
-	my RelationMustExist $rel2
+	my relationMustExist $rel1
+	my relationMustExist $rel2
 	my ColumnsMustBeSame $rel1 $rel2
 	return [list [namespace which sys] === $rel1 $rel2]
     }
@@ -418,9 +395,9 @@ oo::class create bdd::fddd::database {
     # source1 BDD.
 
     method antijoin {dest source1 source2} {
-	my RelationMustExist $dest
-	my RelationMustExist $source1
-	my RelationMustExist $source2
+	my relationMustExist $dest
+	my relationMustExist $source1
+	my relationMustExist $source2
 
 	# Determine the columns in the joined relations
 	set destcolumns [dict get $m_relcolumns $source1]
@@ -432,20 +409,55 @@ oo::class create bdd::fddd::database {
 	return [list [namespace which sys] > $dest $source1 $source2]
     }
 
-    # Method: columns
+    # Method: columnMustExist
     #
-    #	Enumerates all columns in the database
+    #	Makes sure that a given column exists in the database
     #
     # Usage:
-    #	$db columns
+    #	my columnMustExist $name
+    #
+    # Parameters:
+    #	name - Name of a column
     #
     # Results:
-    #	Returns a list of the column names that are known to the databsae.
+    #	Returns an empty result if the column exists. Causes the caller
+    #	to return an error if the column is not found.
+
+    method columnMustExist {name} {
+	if {![dict exists $m_columns $name]} {
+	    return -level 2 -code error \
+		-errorcode [list FDDD ColumnNotDefined $name] \
+		"column \"$name\" is not defined in this database"
+	}
+	return
+    }
+
+    # Method: columns
+    #
+    #	Enumerates all columns in the database, or the columns of a
+    #	specific relation.
+    #
+    # Usage:
+    #	$db columns ?relation?
+    #
+    # Parameters:
+    #	relation - If supplied, indicates the relation being queried.
+    #
+    # Results:
+    #
+    #	Returns the list of columns that participate in the given
+    #	relation.  If no relation is supplied, returns a list of all
+    #	the column names that are known to the database
     #
     # This method executes directly, rather than returning a code fragment
 
-    method columns {} {
-	return [dict keys $m_columns]
+    method columns {{relation {}}} {
+	if {$relation eq {}} {
+	    return [dict keys $m_columns]
+	} else {
+	    my relationMustExist $relation
+	    return [dict get $m_relcolumns $relation]
+	}
     }
 
     # Method: enumerate
@@ -482,7 +494,7 @@ oo::class create bdd::fddd::database {
     method enumerate {dictvar relation script} {
 	upvar 1 $dictvar valdict
 
-	my RelationMustExist $relation
+	my relationMustExist $relation
 
 	# Iterate over the relation, getting SAT terms. Iterate over
 	# the variable assignments that satisfy the terms.
@@ -551,17 +563,19 @@ oo::class create bdd::fddd::database {
     # variables. Other orderings will give results between these two extremes.
 
     method equate {dest col1 col2} {
-	my RelationMustExist $dest
+	my relationMustExist $dest
+	my columnMustExist $col1
+	my columnMustExist $col2
 	set destcolumns [dict get $m_relcolumns $dest]
-	if {![dict exists $m_columns $col1] 
-	    | [lsearch -exact $destcolumns $col1] == -1} {
-	    return -code error -errorcode [list FDDD NoSuchColumn $col1] \
-		"no such column: \"$col1\""
+	if {[lsearch -exact $destcolumns $col1] == -1} {
+	    return -code error -errorcode \
+		[list FDDD RelationDoesNotContainColumn $dest $col1] \
+		"relation \"$dest\" does not contain column \"$col1\""
 	}
-	if {![dict exists $m_columns $col2]
-	    | [lsearch -exact $destcolumns $col2] == -1} {
-	    return -code error -errorcode [list FDDD NoSuchColumn $col2] \
-		"no such column: \"$col2\""
+	if {[lsearch -exact $destcolumns $col2] == -1} {
+	    return -code error -errorcode \
+		[list FDDD RelationDoesNotContainColumn $dest $col1] \
+		"relation \"$dest\" does not contain column \"$col1\""
 	}
 	set vars1 [dict get $m_columns $col1]
 	set vars2 [dict get $m_columns $col2]
@@ -665,9 +679,9 @@ oo::class create bdd::fddd::database {
     # source1 BDD.
 
     method join {dest source1 source2} {
-	my RelationMustExist $dest
-	my RelationMustExist $source1
-	my RelationMustExist $source2
+	my relationMustExist $dest
+	my relationMustExist $source1
+	my relationMustExist $source2
 
 	# Determine the columns in the joined relations
 	set destcolumns [dict get $m_relcolumns $source1]
@@ -699,7 +713,7 @@ oo::class create bdd::fddd::database {
     # in dictonary order by the column names.
 
     method loader {relation} {
-	my RelationMustExist $relation
+	my relationMustExist $relation
 	set i 0
 	foreach column [dict get $m_relcolumns $relation] {
 	    dict set cmdpos $column $i
@@ -731,7 +745,7 @@ oo::class create bdd::fddd::database {
     # This method executes directly, rather than returning a codeburst.
 
     method profile {relation} {
-	my RelationMustExist $relation
+	my relationMustExist $relation
 	sys profile $relation
     }
 
@@ -760,8 +774,8 @@ oo::class create bdd::fddd::database {
 
     method project {dest source} {
 	# columns to project away are determined by dest and source
-	my RelationMustExist $dest
-	my RelationMustExist $source
+	my relationMustExist $dest
+	my relationMustExist $source
 	set discards {}
 	foreach col [dict get $m_relcolumns $dest] {
 	    dict set want $col {}
@@ -800,8 +814,10 @@ oo::class create bdd::fddd::database {
     #
     # Side effects:
     #	The given relation is defined. Its content in the database
-    #	is left undefined. It must either be loaded or populated by
-    #	a rule such as 'join' or 'union' prior to being used.
+    #	is initially empty.
+    #
+    # This command takes effect immediately, rather than returning
+    # code to perform an operation at run time.
 
     method relation {name args} {
 	if {[dict exists $m_relcolumns $name]} {
@@ -811,18 +827,39 @@ oo::class create bdd::fddd::database {
 	}
 	set havecol {}
 	foreach col $args {
+	    my columnMustExist $col
 	    if {[dict exists $havecol $col]} {
 		return -code error -errorcode [list FDDD DuplicateColumn $col] \
 		    "column $col is duplicated in the column list"
 	    }
-	    if {![dict exists $m_columns $col]} {
-		return -code error -errorcode [list FDDD NoSuchColumn $col] \
-		    "no such column: \"$col\""
-	    }
 	    dict set $havecol $col {}
 	}
 	dict set m_relcolumns $name [lsort -dictionary $args]
+	$db set $name {}
 	return $name
+    }
+
+    # Method: relationMustExist
+    #
+    #	Makes sure that a given relation exists in the database
+    #
+    # Usage:
+    #	my relationMustExist $name
+    #
+    # Parameters:
+    #	name - Name of a relation
+    #
+    # Results:
+    #	Returns an empty result if the relation exists. Causes the caller
+    #	to return an error if the relation is not found.
+
+    method relationMustExist {name} {
+	if {![dict exists $m_relcolumns $name]} {
+	    return -level 2 -code error \
+		-errorcode [list FDDD RelationNotDefined $name] \
+		"relation \"$name\" is not defined in this database"
+	}
+	return
     }
 
     # Method: replace
@@ -857,8 +894,8 @@ oo::class create bdd::fddd::database {
     # pair of columns is replaced with an equality over a concatenated pair.
 
     method replace {dest source args} {
-	my RelationMustExist $dest
-	my RelationMustExist $source
+	my relationMustExist $dest
+	my relationMustExist $source
 	set sourcecols {}
 	foreach col [dict get $m_relcolumns $source] {
 	    dict set sourcecols $col {}
@@ -869,6 +906,8 @@ oo::class create bdd::fddd::database {
 	}
 	set colsAdded {}
 	foreach {to from} $args {
+	    my columnMustExist $to
+	    my columnMustExist $from
 	    if {[dict exists $colsAdded $to]} {
 		return -code error \
 		    -errorcode [list FDDD DuplicateReplaceOutput $to] \
@@ -915,7 +954,8 @@ oo::class create bdd::fddd::database {
 	    lappend tovars {*}[lrange $tv 0 [expr {[llength $fv] - 1}]]
 	}
 
-	return [list [namespace which sys] replace $dest $fromvars $tovars $source]
+	return \
+	    [list [namespace which sys] replace $dest $fromvars $tovars $source]
     }
 
     # Method: set
@@ -944,13 +984,13 @@ oo::class create bdd::fddd::database {
     # The copy executes in constant time.
 
     method set {dest source} {
-	my RelationMustExist $dest
+	my relationMustExist $dest
 	if {$source eq {}} {
 	    set source 0
 	} elseif {$source eq {_}} {
 	    set source 1
 	} else {
-	    my RelationMustExist $source
+	    my relationMustExist $source
 	    my ColumnsMustBeSame $dest $source
 	}
 	return [list [namespace which sys] := $dest $source]
@@ -981,9 +1021,9 @@ oo::class create bdd::fddd::database {
     # sizes of the two BDD's.
 
     method union {dest source1 source2} {
-	my RelationMustExist $dest
-	my RelationMustExist $source1
-	my RelationMustExist $source2
+	my relationMustExist $dest
+	my relationMustExist $source1
+	my relationMustExist $source2
 	my ColumnsMustBeSame $dest $source1
 	my ColumnsMustBeSame $dest $source2
 	return [list [namespace which sys] | $dest $source1 $source2]
@@ -992,7 +1032,7 @@ oo::class create bdd::fddd::database {
 if 0 {
     # deprecate this for now.
     method load {name list} {
-	my RelationMustExist $name
+	my relationMustExist $name
 	set nColumns [llength [dict get $m_relcolumns $name]]
 	if {[llength $list] % $nColumns != 0} {
 	    return -code error \

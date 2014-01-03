@@ -414,3 +414,5 @@ set bdd::Parser [grammar::aycock::parser {
     primary ::= CONSTANT { list constant [lindex $_ 0] }
 
 }]
+
+package provide tclbdd 0.1

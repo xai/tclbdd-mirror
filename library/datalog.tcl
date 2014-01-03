@@ -12,12 +12,15 @@
 
 source [file dirname [info script]]/coroutine_iterator.tcl; # TEMP
 source [file dirname [info script]]/coroutine_corovar.tcl; # TEMP
-
+source [file dirname [info script]]/tclbdd.tcl;		   # TEMP
+source [file dirname [info script]]/tclfddd.tcl;	   # TEMP
 
 package require Tcl 8.6
 package require coroutine::corovar 1.0
 package require coroutine::iterator 1.0
 package require grammar::aycock 1.0
+package require tclbdd 0.1
+package require tclbdd::fddd 0.1
 
 namespace import coroutine::corovar::corovar
 
@@ -144,21 +147,21 @@ set bdd::datalog::parser \
 
     head	::=	pliteral		{}
 
-    # The body is a set of comma-separated, possibly negated conditions
+    # The body is a set of comma-separated, possibly negated subgoals
 
-    body	::=	condition
+    body	::=	subgoal
     {
 	set _
     }
-    body	::=	body , condition
+    body	::=	body , subgoal
     {
 	linsert [lindex $_ 0] end [lindex $_ 2]
     }
 
-    # A condition is either a literal, or else an equality constraint
+    # A subgoal is either a literal, or else an equality constraint
 
-    condition	::=	literal			{}
-    condition	::=	equality		{}
+    subgoal	::=	literal			{}
+    subgoal	::=	equality		{}
 
     # A literal is a predicate symbol optionally followed by a list of terms
 
@@ -236,27 +239,27 @@ set bdd::datalog::parser \
 proc bdd::datalog::prettyprint-rule {rule} {
     set s [prettyprint-literal [lindex $rule 0]]
     set sep :-
-    foreach condition [lrange $rule 1 end] {
-	append s $sep [prettyprint-condition $condition]
+    foreach subgoal [lrange $rule 1 end] {
+	append s $sep [prettyprint-subgoal $subgoal]
 	set sep ,
     }
     return $s
 }
-proc bdd::datalog::prettyprint-condition {condition} {
-    switch -exact [lindex $condition 0] {
+proc bdd::datalog::prettyprint-subgoal {subgoal} {
+    switch -exact [lindex $subgoal 0] {
 	EQUALITY {
-	    set s [prettyprint-variable [lindex $condition 1]]
-	    append s = [prettyprint-variable [lindex $condition 2]]
+	    set s [prettyprint-variable [lindex $subgoal 1]]
+	    append s = [prettyprint-variable [lindex $subgoal 2]]
 	}
 	NOT {
 	    set s !
-	    append s [prettyprint-literal [lindex $condition 1]]
+	    append s [prettyprint-literal [lindex $subgoal 1]]
 	}
 	LITERAL {
-	    set s [prettyprint-literal $condition]
+	    set s [prettyprint-literal $subgoal]
 	}
 	default {
-	    error "Expected condition and got $condition"
+	    error "Expected subgoal and got $subgoal"
 	}
     }
     return $s
@@ -328,16 +331,23 @@ oo::class create bdd::datalog::program {
     #		  [2] 1 if the predicate is negated in the rule, 0 otherwise
     #             [3] The dependent rule, as a parse tree
     #             [4] The index of the predicate being tracked within the
-    #                 conditions on the right hand side of the dependent rule.
+    #                 subgoals on the right hand side of the dependent rule.
     # 'query' is a literal giving the query at the end of the program
     #         (if any)
+    # 'executionPlan' gives the eventual order of execution of the facts
+    #                 and rules. It is a list of tuples:
+    #                     RULE literal subgoal subgoal ...
+    #		          FACT literal
+    #		          LOOP predicate executionPlan
+    #                 possibly having 'QUERY literal' at the end.
 
     variable \
 	rules \
 	rulesForPredicate \
 	factsForPredicate \
 	outEdgesForPredicate \
-	query
+	query \
+	executionPlan
 
     # Constructor -
     #
@@ -348,6 +358,7 @@ oo::class create bdd::datalog::program {
 	set rulesForPredicate {}
 	set factsForPredicate {}
 	set outEdgesForPredicate {}
+	set executionPlan {}
     }
 
     # assertRule -
@@ -375,21 +386,21 @@ oo::class create bdd::datalog::program {
 	lappend rules $rule
 	dict lappend rulesForPredicate $lhPredicate $ruleIndex
 
-	# Examine the conditions on the right hand side
+	# Examine the subgoals on the right hand side
 
 	set i 0
-	foreach condition [lrange $rule 1 end] {
+	foreach subgoal [lrange $rule 1 end] {
 	    incr i
-	    switch -exact -- [lindex $condition 0] {
+	    switch -exact -- [lindex $subgoal 0] {
 		EQUALITY { 	# does not create a dependency
 		    continue
 		}
 		LITERAL {
-		    set dependency [lindex $condition 1]
+		    set dependency [lindex $subgoal 1]
 		    set not 0
 		}
 		NOT {
-		    set dependency [lindex $condition 1 1]
+		    set dependency [lindex $subgoal 1 1]
 		    set not 1
 		}
 		default {
@@ -479,7 +490,7 @@ oo::class create bdd::datalog::program {
     #	None.
     #
     # Results:
-    #	TBD
+    #	Returns the execution plan
     #
     # Errors:
     #	Throws an error if the program is not stratifiable.
@@ -498,6 +509,8 @@ oo::class create bdd::datalog::program {
 
     method planExecution {} {
 
+	set executionPlan {}
+
 	# Partition the program into strongly connected components.
 
 	set components {}
@@ -513,6 +526,8 @@ oo::class create bdd::datalog::program {
 	    my planExecutionForComponent $component
 	}
 
+	return $executionPlan
+
     }
 
     # Method: planExecutionForComponent
@@ -524,7 +539,11 @@ oo::class create bdd::datalog::program {
     #	component - List of predicates belonging to the component
     #
     # Results:
-    #	TBD
+    #	None.
+    #
+    # Side effects:
+    #	Appends the execution plan for the component to the plan
+    #	under construction for the program.
     #
     # Errors:
     #	Throws an error if the program is not stratifiable.
@@ -534,8 +553,7 @@ oo::class create bdd::datalog::program {
 	set loops {}
 	foreach predicate $component {
 	    foreach fact [my getFactsForPredicate $predicate] {
-		# TODO - Implement this
-		puts "Compile fact: [::bdd::datalog::prettyprint-literal $fact]"
+		lappend executionPlan [list FACT $fact]
 	    }
 	    foreach ruleNo [my getRulesForPredicate $predicate] {
 		set rule [my getRule $ruleNo]
@@ -549,15 +567,13 @@ oo::class create bdd::datalog::program {
 			lappend loops $rule
 		    }
 		    0 {
-			# TODO - Implement this
-			puts "Compile rule:\
-                              [::bdd::datalog::prettyprint-rule $rule]"
+			lappend executionPlan [list RULE $rule]
 		    }
 		}
 	    }
 	}
 	if {[llength $loops] != 0} {
-	    my planIteration $component $loops
+	    lappend executionPlan [my planIteration $component $loops]
 	}
     }
 
@@ -572,25 +588,27 @@ oo::class create bdd::datalog::program {
     #           have been removed.
     #
     # Results:
-    #	TBD
+    #	Returns the execution plan for the iteration
 
     method planIteration {component loops} {
 	# As a heuristic, iterate over the predicate whose in-degree
 	# most exceeds its out-degree. This is the predicate whose deletion
 	# will remove the most edges from the dependency graph
 
+	# Score the predicates according to the degrees of the dependency
+	# graph.
 	foreach rule $loops {
 	    set lhPredicate [lindex $rule 0 1]
-	    foreach condition [lrange $rule 1 end] {
-		switch -exact -- [lindex $condition 0] {
+	    foreach subgoal [lrange $rule 1 end] {
+		switch -exact -- [lindex $subgoal 0] {
 		    EQUALITY {	# does not introduce a dependency
 			continue
 		    }
 		    NOT {
-			set rhPredicate [lindex $condition 1 1]
+			set rhPredicate [lindex $subgoal 1 1]
 		    }
 		    LITERAL {
-			set rhPredicate [lindex $condition 1]
+			set rhPredicate [lindex $subgoal 1]
 		    }
 		    default {
 			error "in [info level 0]: can't happen."
@@ -602,6 +620,8 @@ oo::class create bdd::datalog::program {
 		}
 	    }
 	}
+
+	# Find the predicate with the high score
 	set maxDelta -Inf
 	dict for {pred d} $delta {
 	    if {$d > $maxDelta} {
@@ -609,28 +629,32 @@ oo::class create bdd::datalog::program {
 		set toRemove $pred
 	    }
 	}
-	# TODO - Implement this
-	puts "Generate a loop header for testing convergence of $toRemove"
+
+	# Make a loop to iterate over that predicate
 	try {
+	    # Take all the other component members and compile
+	    # their rules recursively.
 	    set loopBody [::bdd::datalog::program new]
 	    foreach rule $loops {
 		if {[lindex $rule 0 1] ne $toRemove} {
 		    $loopBody assertRule $rule
 		}
 	    }
-	    $loopBody planExecution
+	    set bodyCode [$loopBody planExecution]
+
+	    # Append the rules for deriving the current member at
+	    # the bottom of the loop.
 	    foreach rule $loops {
 		if {[lindex $rule 0 1] eq $toRemove} {
-		    puts "Compile rule:\
-                              [::bdd::datalog::prettyprint-rule $rule]"
+		    lappend bodyCode [list RULE $rule]
 		}
 	    }
-	    # TODO - Implement this
-	    puts "Close the loop on $toRemove"
-		    
 	} finally {
 	    $loopBody destroy
 	}
+
+	return [list LOOP $toRemove $bodyCode]
+		    
     }
 
     # Method: ruleDependsOn
@@ -648,8 +672,8 @@ oo::class create bdd::datalog::program {
 
     method ruleDependsOn {rule predicates} {
 	set result 0
-	foreach condition [lrange $rule 1 end] {
-	    if {[set r [my conditionDependsOn $condition $predicates]]
+	foreach subgoal [lrange $rule 1 end] {
+	    if {[set r [my subgoalDependsOn $subgoal $predicates]]
 		> $result} {
 		set result $r
 	    }
@@ -657,12 +681,12 @@ oo::class create bdd::datalog::program {
 	return $result
     }
 
-    # Method: conditionDependsOn
+    # Method: subgoalDependsOn
     #
-    #	Tests if a condition depends on one or more of a set of predicates.
+    #	Tests if a subgoal depends on one or more of a set of predicates.
     #
     # Parameters:
-    #	rule - Parse tree of the condition
+    #	rule - Parse tree of the subgoal
     #	predicates - List of predicate names
     #
     # Results:
@@ -670,20 +694,20 @@ oo::class create bdd::datalog::program {
     #   form, 1, if the rule depends on one of the predicates only in
     #   non-negated form, 0 if the rule has no dependency on the predicates
 
-    method conditionDependsOn {condition predicates} {
-	switch -exact -- [lindex $condition 0] {
+    method subgoalDependsOn {subgoal predicates} {
+	switch -exact -- [lindex $subgoal 0] {
 	    EQUALITY {
 		return false
 	    }
 	    NOT {
-		if {[my conditionDependsOn [lindex $condition 1] $predicates]} {
+		if {[my subgoalDependsOn [lindex $subgoal 1] $predicates]} {
 		    return 2
 		} else {
 		    return 0
 		}
 	    }
 	    LITERAL {
-		if {[lsearch -exact $predicates [lindex $condition 1]] >= 0} {
+		if {[lsearch -exact $predicates [lindex $subgoal 1]] >= 0} {
 		    return 1
 		} else {
 		    return 0
@@ -897,14 +921,14 @@ proc bdd::datalog::compileProgram {programText} {
 	set rules [$program getRules]
 	set outedges [$program getEdges]
 	
-	$program planExecution
+	set result [$program planExecution]
 
     } finally {
 
 	$program destroy
 
     }
-    return
+    return $result
 
 }
 
@@ -974,8 +998,8 @@ puts $parseTree2
 #   QUERY literal
 # clause:
 #   FACT literal
-#   RULE Name conditions
-# condition:
+#   RULE Name subgoals
+# subgoal:
 #   literal
 #   EQUALITY variable variable
 # literal:
@@ -989,17 +1013,39 @@ puts $parseTree2
 
 }
 
+# TEMP printing stuff - needs to go somewhere...
+
+proc bdd::datalog::prettyprint-plan {plan {indent 0}} {
+    foreach step $plan {
+	switch -exact [lindex $step 0] {
+	    FACT {
+		puts [format {%*sFACT %s.} $indent {} \
+			  [prettyprint-literal [lindex $step 1]]]
+	    }
+	    LOOP {
+		puts [format "%*sLOOP %s \{" $indent {} [lindex $step 1]]
+		prettyprint-plan [lindex $step 2] [expr {$indent + 4}]
+		puts [format "%*s\}" $indent {}]
+	    }
+	    RULE {
+		puts [format {%*sRULE %s.} $indent {} \
+			  [prettyprint-rule [lindex $step 1]]]
+	    }
+	}
+    }
+}
+
 # Try compiling a program
 
-bdd::datalog::compileProgram {
+bdd::datalog::prettyprint-plan [bdd::datalog::compileProgram {
  
     % A false entry node (node 0) sets every variable and flows
     % to node 1. If any of its variables are reachable, those are
     % variables possibly used uninitialized in the program.
 
-    writes(0, _).
+    writes($startNode, _).
     writes(st,v) :- writes0(st,v).
-    seq(0, 1).
+    seq($startNode, 1).
     seq(st,st2) :- seq0(st,st2).
 
     % flowspast(v,st,st2) means that control passes from the exit of st
@@ -1019,7 +1065,7 @@ bdd::datalog::compileProgram {
     % A variable read that is reachable from the entry is a read of a
     % possibly uninitialized variable
 
-    uninitRead(st, v) :- reaches(v, 0, st).
+    uninitRead(st, v) :- reaches(v, $startNode, st).
 
     % A variable write that reaches nowhere else is dead code
 
@@ -1032,4 +1078,4 @@ bdd::datalog::compileProgram {
     hP(h1,f,h2) :- store(v1,f,v2), vP(v1,h1), vP(v2,h2).
     vP(v2,h2) :- load(v1,f,v2), vP(v1,h1), hP(h1,f,h2).
 
-}
+}]

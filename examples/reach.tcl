@@ -35,7 +35,7 @@ profile db seq
 # compiler.
 
 db relation t10 v;		# The universal set of variables
-db relation t11 v st3;	# writes(v, st3)
+db relation t11 v st3;		# writes(v, st3)
 db relation t12 v st st3;	# flowspast(v, st, st3)
 db relation t13 v st st3;	# flowspast(v, st, st3),!writes(st3,v)
 db relation t14 v st2 st3;	# flowspast(v, st3, st2)
