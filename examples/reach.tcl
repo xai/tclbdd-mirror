@@ -1,3 +1,8 @@
+# TEMP : setup to run uninstalled
+
+source [file join [file dirname [info script]] .. library tclbdd.tcl]
+load ./libtclbdd0.1.so
+source [file join [file dirname [info script]] .. library tclfddd.tcl]
 source [file join [file dirname [info script]] loadProgram.tcl]
 
 proc profile! {db var} {

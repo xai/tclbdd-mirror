@@ -12,15 +12,11 @@
 
 source [file dirname [info script]]/coroutine_iterator.tcl; # TEMP
 source [file dirname [info script]]/coroutine_corovar.tcl; # TEMP
-source [file dirname [info script]]/tclbdd.tcl;		   # TEMP
-source [file dirname [info script]]/tclfddd.tcl;	   # TEMP
 
 package require Tcl 8.6
 package require coroutine::corovar 1.0
 package require coroutine::iterator 1.0
 package require grammar::aycock 1.0
-package require tclbdd 0.1
-package require tclbdd::fddd 0.1
 
 namespace import coroutine::corovar::corovar
 
@@ -340,6 +336,9 @@ oo::class create bdd::datalog::program {
     #		          FACT literal
     #		          LOOP predicate executionPlan
     #                 possibly having 'QUERY literal' at the end.
+    # 'intcode' is the execution plan translated to an intermediate code
+    #           that expresses the work to be done in terms of relational
+    #	        algebra.
 
     variable \
 	rules \
@@ -347,7 +346,9 @@ oo::class create bdd::datalog::program {
 	factsForPredicate \
 	outEdgesForPredicate \
 	query \
-	executionPlan
+	executionPlan \
+	intcode \
+	gensym
 
     # Constructor -
     #
@@ -359,6 +360,19 @@ oo::class create bdd::datalog::program {
 	set factsForPredicate {}
 	set outEdgesForPredicate {}
 	set executionPlan {}
+	set intcode {}
+	set gensym 0
+    }
+
+    # gensym -
+    #
+    #	Generate a unique symbol
+    #
+    # Results:
+    #	Returns a generated symbol
+
+    method gensym {{prefix G}} {
+	return ${prefix}[incr gensym]
     }
 
     # assertRule -
@@ -716,6 +730,159 @@ oo::class create bdd::datalog::program {
 	}
     }
 
+    method translateExecutionPlan {db plan} {
+	foreach step $plan {
+	    switch -exact -- [lindex $step 0] {
+		FACT {
+		    my translateFact $db [lindex $step 1]
+		}
+		LOOP {
+		    my translateLoop $db [lindex $step 1] [lindex $step 2]
+		} 
+		QUERY {
+		    my translateQuery $db [lindex $step 1] [lindex $step 2]
+		}
+		RULE {
+		    my translateRule $db [lindex $step 1]
+		}
+		default {
+		    error "in translateExecutionPlan: can't happen"
+		}
+	    }
+	}
+	return $intcode
+    }
+
+    method translateFact {db fact} {
+	set predicate [lindex $fact 1]
+	db relationMustExist $predicate
+	set cols [$db columns $predicate]
+	if {[llength $cols] != [llength $fact]-2} {
+	    set ppfact [bdd::datalog::prettyprint-literal $fact]
+	    return -code error \
+		-errorCode [list DATALOG wrongColumns $predicate $ppfact] \
+		"$predicate has a different number of columns from $ppfact"
+	}
+	set probeColumns {}
+	set dontCareColumns {}
+	foreach term [lrange $fact 2 end] col $cols {
+	    switch -exact [lindex $term 0] {
+		CONSTANT {
+		    lappend probeColumns $col
+		    lappend probeValues $term
+		}
+		VARIABLE {
+		    if {[lindex $term 1] ne {_}} {
+			set ppfact [bdd::datalog::prettyprint-literal $fact]
+			puts stderr "warning: unused variable [lindex $term 1]\
+                                     in fact $ppfact."
+		    }
+		    lappend dontCareColumns $col
+		}
+	    }
+	}
+	if {$probeColumns eq {}} {
+	    set ppfact [bdd::datalog::prettyprint-literal $fact]
+	    puts stderr "warning: fact $ppfact. asserts the universal set"
+	    lappend intcode \
+		[list SET $predicate _]
+	} else {
+	    if {$dontCareColumns ne {}} {
+		set probeRelation [my gensym \#T]
+		set dontCareRelation [my gensym \#T]
+		set joinedRelation [my gensym \#T]
+		lappend intcode \
+		    [list RELATION $probeRelation $probeColumns]
+		lappend intcode \
+		    [list LOAD $probeRelation $probeValues]
+		lappend intcode \
+		    [list RELATION $dontCareRelation $dontCareColumns]
+		lappend intcode \
+		    [list SET $dontCareRelation _]
+		lappend intcode \
+		    [list JOIN $joinedRelation $probeRelation $dontCareRelation]
+		lappend intcode \
+		    [list UNION $predicate $predicate $joinedRelation]
+	    } else {
+		lappend intcode \
+		    [list LOAD $predicate $probeValues]
+	    }
+	}
+    }
+
+    method translateLoop {db predicate body} {
+	# TODO - Incrementalization?
+	set comparison [my gensym \#T]
+	db relationMustExist $predicate
+	set cols [$db columns $predicate]
+	lappend intcode [list RELATION $comparison $cols]
+	set where [llength $intcode]
+	lappend intcode LOOPHEAD
+	lappend intcode [list SET $comparison $predicate]
+	my translateExecutionPlan $db $body
+	lappend intcode [list IFNOT=== $where $comparison $predicate]
+    }
+
+    method translateQuery {db query} {
+	# TODO: Destub
+    }
+
+    method translateRule {db rule} {
+	set tempRelation {}
+	set tempColumns {}
+	foreach subgoal [lrange $rule 1 end] {
+	    lassign [my translateSubgoal \
+			 $db $subgoal $tempRelation $tempColumns] \
+		tempRelation tempColumns
+	}
+	my translateRuleHead $db [lindex $rule 0] $tempRelation $tempColumns
+    }
+
+    method translateSubgoal {db subgoal dataSoFar columnsSoFar} {
+	switch -exact [lindex $subgoal 0] {
+	    NOT {
+		lassign \
+		    [my translateLiteral $db \
+			 [lindex $subgoal 1] $dataSoFar $columnsSoFar] \
+		    subgoalRelation subgoalColumns
+		lappend intcode [list NEGATE $subgoalRelation $subgoalRelation]
+		tailcall my translateSubgoalEnd $db ANTIJOIN \
+		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
+	    }
+	    LITERAL {
+		lassign \
+		    [my translateLiteral \
+			 $db $subgoal $dataSoFar $columnsSoFar] \
+		    subgoalRelation subgoalColumns
+		tailcall my translateSubgoalEnd $db JOIN \
+		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
+	    }
+	    default {
+		error "in translateSubgoal: can't happen"
+	    }
+	}
+    }
+
+    method translateLiteral {db literal dataSoFar columnsSoFar} {
+	# TODO: Destub
+	lappend intcode [list IDONTKNOW SELECTFROM [lindex $literal 1]]
+	return [list IDONTKNOW-SELECTFROM-[lindex $literal 1] $columnsSoFar]
+    }
+
+    method translateSubgoalEnd {db operation 
+				dataSoFar columnsSoFar
+				dataThisOp columnsThisOp} {
+	# TODO: Destub
+	lappend intcode [list IDONTKNOW JOINWITH $dataSoFar]
+	return [list IDONTKNOW-JOINWITH-$dataSoFar $columnsSoFar]
+    }
+
+    method translateRuleHead {db headLiteral sourceRelation sourceColumns} {
+	# TODO: Destub
+	lappend intcode [list IDONTKNOW UNIONTO [lindex $headLiteral 1] $sourceRelation]
+	
+    }
+
     method getRule {ruleNo} {
 	return [lindex $rules $ruleNo]
     }
@@ -902,7 +1069,7 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
     return
 }
 
-proc bdd::datalog::compileProgram {programText} {
+proc bdd::datalog::compileProgram {db programText} {
 
     variable parser
 
@@ -921,7 +1088,12 @@ proc bdd::datalog::compileProgram {programText} {
 	set rules [$program getRules]
 	set outedges [$program getEdges]
 	
-	set result [$program planExecution]
+	set plan [$program planExecution]
+
+	# TODO - need to clear executionPlan?
+	set result [$program translateExecutionPlan $db $plan]
+
+	# TODO - This sequence needs refactoring
 
     } finally {
 
@@ -1037,7 +1209,18 @@ proc bdd::datalog::prettyprint-plan {plan {indent 0}} {
 
 # Try compiling a program
 
-bdd::datalog::prettyprint-plan [bdd::datalog::compileProgram {
+source [file join [file dirname [info script]] tclbdd.tcl]
+load ../penelope-sys/libtclbdd0.1.so
+source [file join [file dirname [info script]] tclfddd.tcl]
+source [file join [file dirname [info script]] .. examples loadProgram.tcl]
+source [file join [file dirname [info script]] .. examples program1.tcl]
+
+set vars [analyzeProgram $program db]
+
+db relation flowspast v st st2
+
+set i 0
+foreach step [bdd::datalog::compileProgram db {
  
     % A false entry node (node 0) sets every variable and flows
     % to node 1. If any of its variables are reachable, those are
@@ -1073,9 +1256,16 @@ bdd::datalog::prettyprint-plan [bdd::datalog::compileProgram {
 
     % Also do the bddbddb example. Only 1 stratum, but 2 loops in the larger SCC
 
-    vP(v, h) :- vP0(v,h).
-    vP(v1,h) :- assign(v1,v2), vP(v2,h).
-    hP(h1,f,h2) :- store(v1,f,v2), vP(v1,h1), vP(v2,h2).
-    vP(v2,h2) :- load(v1,f,v2), vP(v1,h1), hP(h1,f,h2).
+    % vP(v, h) :- vP0(v,h).
+    % vP(v1,h) :- assign(v1,v2), vP(v2,h).
+    % hP(h1,f,h2) :- store(v1,f,v2), vP(v1,h1), vP(v2,h2).
+    % vP(v2,h2) :- load(v1,f,v2), vP(v1,h1), hP(h1,f,h2).
 
-}]
+    % Compile dead code query
+
+    deadWrite(st, v)?
+
+}] {
+    puts "$i: $step"
+    incr i
+}

@@ -835,7 +835,7 @@ oo::class create bdd::fddd::database {
 	    dict set $havecol $col {}
 	}
 	dict set m_relcolumns $name [lsort -dictionary $args]
-	$db set $name {}
+	{*}[my set $name {}]
 	return $name
     }
 
