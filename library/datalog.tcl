@@ -881,7 +881,6 @@ oo::class create bdd::datalog::program {
 		-errorCode [list DATALOG wrongColumns $predicate $pplit] \
 		"$predicate has a different number of columns from $pplit"
 	}
-	puts "translate [bdd::datalog::prettyprint-literal $literal]"
 	set selector [my gensym #T]
 	set selectLiteral [list LITERAL $selector]
 	set needSelect 0
@@ -892,7 +891,6 @@ oo::class create bdd::datalog::program {
 	set renamedFrom {}
 	set renamedTo {}
 	foreach term [lrange $literal 2 end] col $cols {
-	    puts "unify database column '$col' with term '$term'"
 	    switch -exact -- [lindex $term 0] {
 		CONSTANT {
 		    lappend selectLiteral $term
@@ -976,20 +974,54 @@ oo::class create bdd::datalog::program {
 		-errorCode [list DATALOG wrongColumns $predicate $pplit] \
 		"$predicate has a different number of columns from $pplit"
 	}
-	set destColumns [lrange $literal 2 end]
+
+	# Analyze the head of the rule
+	# Complain about columns in literal that are not in sourceColumns.
+
+	set pplit [bdd::datalog::prettyprint-literal $literal]
+	set destColumn {}
+	set dontCareColumns {}
+	set renamedFrom {}
+	set renamedTo {}
+	set constant [my gensym #T]
+	set constantColumns {}
+	set constantLiteral [list LITERAL $constant]
+	foreach destTerm [lrange $literal 2 end] col $cols {
+	    switch -exact -- [lindex $destTerm 0] {
+		CONSTANT {
+		    lappend constantColumns $col
+		    lappend constantLiteral $destTerm
+		}
+		VARIABLE {
+		    set vname [lindex $destTerm 1]
+		    if {$vname eq {_}} {
+			lappend dontCareColumns $col
+		    } else {
+			if {$col ne $vname} {
+			    lappend renamedFrom $vname
+			    lappend renamedTo $col
+			}
+			if {[lsearch -exact $sourceColumns $vname] < 0} {
+			    return -code error \
+				-errorCode \
+				[list DATALOG MissingVariable $vname $pplit] \
+				"variable $vname appears in the head $pplit\
+                                 but not in the body $sourceColumns"
+			}
+			dict set destColumn $vname {}
+			lappend renamedColumns $col
+		    }
+		}
+	    }
+	}
 
 	# Project away unused columns in sourceColumns.
-	# Warn about columns in literal that are not in sourceColumns.
-	# Rename columns from literal to destination.
-	# Join with any don't-cares
-
 	set needProject 0
 	set projector [my gensym #T]
 	set projectColumns {}
-	puts "Project $sourceColumns into $destColumns"
 	foreach col $sourceColumns {
-	    if {[lsearch -exact $destColumns $col] >= 0} {
-		lappend projectColumns {}
+	    if {[dict exists $destColumn $col]} {
+		lappend projectColumns $col
 	    } else {
 		set needProject 1
 	    }
@@ -1002,9 +1034,48 @@ oo::class create bdd::datalog::program {
 	    set renameSource $sourceRelation
 	}
 
-	# TODO: Destub
+	# Rename columns from literal to destination.
+	if {[llength $renamedFrom] > 0} {
+	    lappend intcode [list RELATION $renamed $renamedColumns]
+	    set renameCommand [list RENAME $renamed $renameSource]
+	    foreach to $renamedTo from $renamedFrom {
+		lappend renameCommand $to $from
+	    }
+	    lappend intcode $renameCommand
+	    set joinSource $renamed
+	} else {
+	    set joinSource $renameSource
+	}
 
-	lappend intcode [list IDONTKNOW UNIONTO [lindex $literal 1] $sourceRelation]
+	# Join with any constants
+
+	set joinColumns $renamedColumns
+	if {[llength $constantColumns] > 0} {
+	    lappend intcode [list RELATION $constant $constantColumns]
+	    my translateFact $db $constantLiteral $constantColumns
+	    lappend joinColumns {*}$constantColumns
+	    set joined [my gensym #T]
+	    lappend intcode [list RELATION $joined $joinColumns]
+	    lappend intcode [list JOIN $joined $joinSource $constant]
+	    set joinSource $joined
+	}
+
+	# Join with any don't-cares
+
+	if {[llength $dontCareColumns] > 0} {
+	    set dontCareRelation [my gensym #T]
+	    lappend intcode [list RELATION $dontCareRelation $dontCareColumns]
+	    lappend intcode [list SET $dontCareRelation _]
+	    lappend joinColumns {*}$dontCareColumns
+	    set joined [my gensym #T]
+	    lappend intcode [list RELATION $joined $joinColumns]
+	    lappend intcode [list JOIN $joined $joinSource $dontCareRelation]
+	    set joinSource $joined
+
+	}
+
+	# Union the result into the destination
+	lappend intcode [list UNION $predicate $predicate $joinSource]
 	
     }
 
@@ -1370,10 +1441,10 @@ foreach step [bdd::datalog::compileProgram db {
     % flowspast(v,st,st2) means that control passes from the exit of st
     % to the entry of st2 without altering the value of v
 
-    flowspast(v, st, st2) :- seq(st, st2).
+    flowspast(_, st, st2) :- seq(st, st2).
     flowspast(v, st, st2) :- flowspast(v, st, st3),
                              !writes(st3, v),
-                             flowspast(v, st3, st).
+                             flowspast(v, st3, st2).
 
     % reaches(v,st,st2) means that st assigns a value to v, which
     % reaches st2, which reads the value of v : that is, st is a
@@ -1385,6 +1456,10 @@ foreach step [bdd::datalog::compileProgram db {
     % possibly uninitialized variable
 
     uninitRead(st, v) :- reaches(v, $startNode, st).
+
+    % The following statement is nonsense, but tests a constant in the head.
+
+    uninitRead(st, $ENV) :- reads(st, $ENV).
 
     % A variable write that reaches nowhere else is dead code
 
