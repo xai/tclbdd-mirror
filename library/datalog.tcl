@@ -966,9 +966,45 @@ oo::class create bdd::datalog::program {
 	return [list $resultRelation $resultColumns]
     }
 
-    method translateRuleHead {db headLiteral sourceRelation sourceColumns} {
+    method translateRuleHead {db literal sourceRelation sourceColumns} {
+	set predicate [lindex $literal 1]
+	db relationMustExist $predicate
+	set cols [db columns $predicate]
+	if {[llength $cols] != [llength $literal]-2} {
+	    set pplit [bdd::datalog::prettyprint-literal $literal]
+	    return -code error \
+		-errorCode [list DATALOG wrongColumns $predicate $pplit] \
+		"$predicate has a different number of columns from $pplit"
+	}
+	set destColumns [lrange $literal 2 end]
+
+	# Project away unused columns in sourceColumns.
+	# Warn about columns in literal that are not in sourceColumns.
+	# Rename columns from literal to destination.
+	# Join with any don't-cares
+
+	set needProject 0
+	set projector [my gensym #T]
+	set projectColumns {}
+	puts "Project $sourceColumns into $destColumns"
+	foreach col $sourceColumns {
+	    if {[lsearch -exact $destColumns $col] >= 0} {
+		lappend projectColumns {}
+	    } else {
+		set needProject 1
+	    }
+	}
+	if {$needProject} {
+	    lappend intcode [list RELATION $projector $projectColumns]
+	    lappend intcode [list PROJECT $projector $sourceRelation]
+	    set renameSource $projector
+	} else {
+	    set renameSource $sourceRelation
+	}
+
 	# TODO: Destub
-	lappend intcode [list IDONTKNOW UNIONTO [lindex $headLiteral 1] $sourceRelation]
+
+	lappend intcode [list IDONTKNOW UNIONTO [lindex $literal 1] $sourceRelation]
 	
     }
 
