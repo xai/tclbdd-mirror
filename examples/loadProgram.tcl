@@ -91,12 +91,12 @@ proc analyzeProgram {program db} {
 		  [bdd::fddd::domain st3 $stbits bigendian]]]
     
     $db relation reads st v
-    $db relation writes st v
-    $db relation seq st st2
+    $db relation writes0 st v
+    $db relation seq0 st st2
 
     interp alias {} loadReads {} {*}[$db loader reads]
-    interp alias {} loadWrites {} {*}[$db loader writes]
-    interp alias {} loadSeq {} {*}[$db loader seq]
+    interp alias {} loadWrites {} {*}[$db loader writes0]
+    interp alias {} loadSeq {} {*}[$db loader seq0]
 
     # pass 2 - discover 'reads', 'writes', 'seq' relations
     pass2 db $program $vars $labels

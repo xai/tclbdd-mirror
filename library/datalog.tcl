@@ -753,15 +753,18 @@ oo::class create bdd::datalog::program {
 	return $intcode
     }
 
-    method translateFact {db fact} {
+    method translateFact {db fact {cols {}}} {
+	lappend intcode "# [bdd::datalog::prettyprint-literal $fact]"
 	set predicate [lindex $fact 1]
-	db relationMustExist $predicate
-	set cols [$db columns $predicate]
-	if {[llength $cols] != [llength $fact]-2} {
-	    set ppfact [bdd::datalog::prettyprint-literal $fact]
-	    return -code error \
-		-errorCode [list DATALOG wrongColumns $predicate $ppfact] \
-		"$predicate has a different number of columns from $ppfact"
+	if {$cols eq {}} {
+	    db relationMustExist $predicate
+	    set cols [$db columns $predicate]
+	    if {[llength $cols] != [llength $fact]-2} {
+		set ppfact [bdd::datalog::prettyprint-literal $fact]
+		return -code error \
+		    -errorCode [list DATALOG wrongColumns $predicate $ppfact] \
+		    "$predicate has a different number of columns from $ppfact"
+	    }
 	}
 	set probeColumns {}
 	set dontCareColumns {}
@@ -788,9 +791,9 @@ oo::class create bdd::datalog::program {
 		[list SET $predicate _]
 	} else {
 	    if {$dontCareColumns ne {}} {
-		set probeRelation [my gensym \#T]
-		set dontCareRelation [my gensym \#T]
-		set joinedRelation [my gensym \#T]
+		set probeRelation [my gensym #T]
+		set dontCareRelation [my gensym #T]
+		set joinedRelation [my gensym #T]
 		lappend intcode \
 		    [list RELATION $probeRelation $probeColumns]
 		lappend intcode \
@@ -799,6 +802,8 @@ oo::class create bdd::datalog::program {
 		    [list RELATION $dontCareRelation $dontCareColumns]
 		lappend intcode \
 		    [list SET $dontCareRelation _]
+		lappend intcode \
+		    [list RELATION $joinedRelation $cols]
 		lappend intcode \
 		    [list JOIN $joinedRelation $probeRelation $dontCareRelation]
 		lappend intcode \
@@ -812,15 +817,15 @@ oo::class create bdd::datalog::program {
 
     method translateLoop {db predicate body} {
 	# TODO - Incrementalization?
-	set comparison [my gensym \#T]
+	set comparison [my gensym #T]
 	db relationMustExist $predicate
 	set cols [$db columns $predicate]
 	lappend intcode [list RELATION $comparison $cols]
 	set where [llength $intcode]
-	lappend intcode LOOPHEAD
+	lappend intcode BEGINLOOP
 	lappend intcode [list SET $comparison $predicate]
 	my translateExecutionPlan $db $body
-	lappend intcode [list IFNOT=== $where $comparison $predicate]
+	lappend intcode [list ENDLOOP $comparison $predicate $where]
     }
 
     method translateQuery {db query} {
@@ -828,6 +833,7 @@ oo::class create bdd::datalog::program {
     }
 
     method translateRule {db rule} {
+	lappend intcode "# [::bdd::datalog::prettyprint-rule $rule]"
 	set tempRelation {}
 	set tempColumns {}
 	foreach subgoal [lrange $rule 1 end] {
@@ -845,9 +851,11 @@ oo::class create bdd::datalog::program {
 		    [my translateLiteral $db \
 			 [lindex $subgoal 1] $dataSoFar $columnsSoFar] \
 		    subgoalRelation subgoalColumns
-		lappend intcode [list NEGATE $subgoalRelation $subgoalRelation]
 		tailcall my translateSubgoalEnd $db ANTIJOIN \
 		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
+	    }
+	    EQUALITY {
+		# TODO - what to do here?
 	    }
 	    LITERAL {
 		lassign \
@@ -864,17 +872,98 @@ oo::class create bdd::datalog::program {
     }
 
     method translateLiteral {db literal dataSoFar columnsSoFar} {
-	# TODO: Destub
-	lappend intcode [list IDONTKNOW SELECTFROM [lindex $literal 1]]
-	return [list IDONTKNOW-SELECTFROM-[lindex $literal 1] $columnsSoFar]
+	set predicate [lindex $literal 1]
+	db relationMustExist $predicate
+	set cols [db columns $predicate]
+	if {[llength $cols] != [llength $literal]-2} {
+	    set pplit [bdd::datalog::prettyprint-literal $literal]
+	    return -code error \
+		-errorCode [list DATALOG wrongColumns $predicate $pplit] \
+		"$predicate has a different number of columns from $pplit"
+	}
+	puts "translate [bdd::datalog::prettyprint-literal $literal]"
+	set selector [my gensym #T]
+	set selectLiteral [list LITERAL $selector]
+	set needSelect 0
+	set needProject 0
+	set projector [my gensym #T]
+	set projectColumns {}
+	set renamed [my gensym #T]
+	set renamedFrom {}
+	set renamedTo {}
+	foreach term [lrange $literal 2 end] col $cols {
+	    puts "unify database column '$col' with term '$term'"
+	    switch -exact -- [lindex $term 0] {
+		CONSTANT {
+		    lappend selectLiteral $term
+		    set needSelect 1
+		}
+		VARIABLE {
+		    set varName [lindex $term 1]
+		    lappend selectLiteral {VARIABLE _}
+		    if {$varName eq {_}} {
+			set needProject 1
+ 		    } else {
+			lappend projectColumns $col
+			lappend renamedColumns $varName
+			if {$varName eq $col} {
+			    # no rename needed
+			} else {
+			    lappend renamedFrom $col
+			    lappend renamedTo $varName
+			}
+		    }
+		}
+	    }
+	}
+	if {$needSelect} {
+	    lappend intcode [list RELATION $selector $cols]
+	    my translateFact $db $selectLiteral $cols
+	    lappend intcode [list JOIN $selector $selector $predicate]
+	    set projectSource $selector
+	} else {
+	    set projectSource $predicate
+	}
+	if {$needProject} {
+	    lappend intcode [list RELATION $projector $projectColumns]
+	    lappend intcode [list PROJECT $projector $projectSource]
+	    set renameSource $projector
+	} else {
+	    set renameSource $projectSource
+	}
+	if {[llength $renamedFrom] > 0} {
+	    lappend intcode [list RELATION $renamed $renamedColumns]
+	    set renameCommand [list RENAME $renamed $renameSource]
+	    foreach to $renamedTo from $renamedFrom {
+		lappend renameCommand $to $from
+	    }
+	    lappend intcode $renameCommand
+	    set result $renamed
+	} else {
+	    set result $renameSource
+	}
+	return [list $result $renamedColumns]
     }
 
     method translateSubgoalEnd {db operation 
 				dataSoFar columnsSoFar
 				dataThisOp columnsThisOp} {
-	# TODO: Destub
-	lappend intcode [list IDONTKNOW JOINWITH $dataSoFar]
-	return [list IDONTKNOW-JOINWITH-$dataSoFar $columnsSoFar]
+	if {$dataSoFar eq {}} {
+	    if {$operation eq {ANTIJOIN}} {
+		lappend intcode [list NEGATE $dataThisOp $dataThisOp]
+	    }
+	    set resultRelation $dataThisOp
+	    set resultColumns $columnsThisOp
+	} else {
+	    set resultColumns $columnsSoFar
+	    lappend resultColumns {*}$columnsThisOp
+	    set resultColumns [lsort -unique -dictionary $resultColumns]
+	    set resultRelation [my gensym #T]
+	    lappend intcode [list RELATION $resultRelation $resultColumns]
+	    lappend intcode [list $operation $resultRelation \
+				 $dataSoFar $dataThisOp]
+	}
+	return [list $resultRelation $resultColumns]
     }
 
     method translateRuleHead {db headLiteral sourceRelation sourceColumns} {
@@ -1209,15 +1298,26 @@ proc bdd::datalog::prettyprint-plan {plan {indent 0}} {
 
 # Try compiling a program
 
+if {[info exists ::env(BUILD_DIR)]} {
+    set buildDir $::env(BUILD_DIR)
+} else {
+    set buildDir .
+}
+
 source [file join [file dirname [info script]] tclbdd.tcl]
-load ../penelope-sys/libtclbdd0.1.so
+load [file join $buildDir libtclbdd0.1.so]
 source [file join [file dirname [info script]] tclfddd.tcl]
 source [file join [file dirname [info script]] .. examples loadProgram.tcl]
 source [file join [file dirname [info script]] .. examples program1.tcl]
 
 set vars [analyzeProgram $program db]
 
+db relation seq st st2
+db relation writes st v
 db relation flowspast v st st2
+db relation reaches v st st2
+db relation uninitRead st v
+db relation deadWrite st v
 
 set i 0
 foreach step [bdd::datalog::compileProgram db {

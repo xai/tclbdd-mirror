@@ -17,8 +17,8 @@ source [file join [file dirname [info script]] program1.tcl]
 set vars [analyzeProgram $program db]
 
 profile db reads
-profile db writes
-profile db seq
+profile db writes0
+profile db seq0
 
 #############################################################################
 
@@ -27,7 +27,7 @@ profile db seq
 # flowspast(v,st,st2) means: Control may pass from the end of
 # instruction 'st1' to the start of instruction 'st2' without
 # assigning to the variable 'v'.  Note how the induction case
-# recurses twice into 'flowspast' rather than using 'seq'. This
+# recurses twice into 'flowspast' rather than using 'seq0'. This
 # means that the path length of the 'flowpast' relation can
 # roughly double on each pass, meaning that the number of passes
 # in the iteration-to-convergence is only logarithmic in the
@@ -40,15 +40,15 @@ profile db seq
 # compiler.
 
 db relation t10 v;		# The universal set of variables
-db relation t11 v st3;		# writes(v, st3)
+db relation t11 v st3;		# writes0(v, st3)
 db relation t12 v st st3;	# flowspast(v, st, st3)
-db relation t13 v st st3;	# flowspast(v, st, st3),!writes(st3,v)
+db relation t13 v st st3;	# flowspast(v, st, st3),!writes0(st3,v)
 db relation t14 v st2 st3;	# flowspast(v, st3, st2)
 db relation t15 v st st2 st3;	# flowspast(v, st, st3),
-				# !writes(st3,v),
+				# !writes0(st3,v),
 				# flowspast(v, st3, st2)
 db relation t16 v st st2;	# project{v,st,st2}(t15)
-db relation t17 v st st2;	# writes(st,v),flowspast(v,st,st2)
+db relation t17 v st st2;	# writes0(st,v),flowspast(v,st,st2)
 db relation t18 v st2;		# reads(st2,v)
 
 db relation flowspast v st st2
@@ -60,21 +60,21 @@ db relation reaches v st st2
 proc reachability {} [subst {
 
     ### input: reads(st,v)
-    ### input: writes(st,v)
-    ### input: seq(st,st2)
+    ### input: writes0(st,v)
+    ### input: seq0(st,st2)
     ### output: flowspast(v,st,st2)
     ### output: reaches(v,st,st2)
 
-    ### flowspast(v,st,st2) :- seq(st,st2)
+    ### flowspast(v,st,st2) :- seq0(st,st2)
     
     [db set t10 _]
-    [db join flowspast seq t10]; 		profile db flowspast
+    [db join flowspast seq0 t10]; 		profile db flowspast
 
     ### flowspast(v,st,st2) :- flowspast(v,st,st3),
-    ###                        !writes(st3,v),
+    ###                        !writes0(st3,v),
     ###                        flowspast(v,st3,st2)
 
-    [db replace t11 writes st3 st]; # invariant code hoisted out of loop
+    [db replace t11 writes0 st3 st]; # invariant code hoisted out of loop
     [db set flowspast' {}]
     while {!\[[db === flowspast flowspast']\]} {
 	[db set flowspast' flowspast]
@@ -86,11 +86,11 @@ proc reachability {} [subst {
 	[db union flowspast flowspast' t16];	profile db flowspast
     }
 
-    ### reaches(v,st,st2) :- writes(st,v),
+    ### reaches(v,st,st2) :- writes0(st,v),
     ###                      flowspast(v,st,st2),
     ###                      reads(st2,v)
 
-    [db join t17 writes flowspast]; 		profile db t17
+    [db join t17 writes0 flowspast]; 		profile db t17
     [db replace t18 reads st2 st]; 		profile db t18
     [db join reaches t17 t18];			profile db reaches
 

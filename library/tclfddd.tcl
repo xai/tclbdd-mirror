@@ -278,7 +278,8 @@ oo::class create bdd::fddd::database {
     #   Causes the caller to return an error if it is different.
 
     method ColumnsMustBe {rel cols} {
-	if {[dict get $m_relcolumns $rel] ne $cols} {
+	if {[lsort -dictionary [dict get $m_relcolumns $rel]]
+	    ne [lsort -dictionary $cols]} {
 	    return -level 2 -code error \
 		-errorcode [list FDDD WrongColumns $rel \
 				[dict get $m_relcolumns $rel] $cols] \
@@ -306,8 +307,8 @@ oo::class create bdd::fddd::database {
     #   different.
 
     method ColumnsMustBeSame {rel1 rel2} {
-	if {[dict get $m_relcolumns $rel1]
-	    ne [dict get $m_relcolumns $rel2]} {
+	if {[lsort -dictionary [dict get $m_relcolumns $rel1]]
+	    ne [lsort -dictionary [dict get $m_relcolumns $rel2]]} {
 	    return -level 2 -code error \
 		-errorcode [list FDDD DifferentColumns $rel1 $rel2] \
 		"relations \"$rel1\" and \"$rel2\" have different columns"
@@ -709,8 +710,7 @@ oo::class create bdd::fddd::database {
     #	Returns a command prefix for a command that will add a tuple
     #	to the given relation.
     #
-    # To the prefix should be appended the values of the columns,
-    # in dictonary order by the column names.
+    # To the prefix should be appended the values of the columns
 
     method loader {relation} {
 	my relationMustExist $relation
@@ -834,7 +834,7 @@ oo::class create bdd::fddd::database {
 	    }
 	    dict set $havecol $col {}
 	}
-	dict set m_relcolumns $name [lsort -dictionary $args]
+	dict set m_relcolumns $name $args
 	{*}[my set $name {}]
 	return $name
     }
