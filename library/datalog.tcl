@@ -22,7 +22,8 @@ namespace import coroutine::corovar::corovar
 
 namespace eval bdd {
     namespace eval datalog {
-	namespace export lex parse compile
+	variable gensym 0
+	namespace export compileProgram
     }
 }
 
@@ -347,8 +348,7 @@ oo::class create bdd::datalog::program {
 	outEdgesForPredicate \
 	query \
 	executionPlan \
-	intcode \
-	gensym
+	intcode
 
     # Constructor -
     #
@@ -361,7 +361,6 @@ oo::class create bdd::datalog::program {
 	set outEdgesForPredicate {}
 	set executionPlan {}
 	set intcode {}
-	set gensym 0
     }
 
     # gensym -
@@ -372,7 +371,7 @@ oo::class create bdd::datalog::program {
     #	Returns a generated symbol
 
     method gensym {{prefix G}} {
-	return ${prefix}[incr gensym]
+	return ${prefix}[incr ::bdd::datalog::gensym]
     }
 
     # assertRule -
@@ -540,6 +539,12 @@ oo::class create bdd::datalog::program {
 	    my planExecutionForComponent $component
 	}
 
+	# Tack on the query at the end
+
+	if {[info exists query]} {
+	    lappend executionPlan [list QUERY $query]
+	}
+
 	return $executionPlan
 
     }
@@ -583,6 +588,9 @@ oo::class create bdd::datalog::program {
 		    0 {
 			lappend executionPlan [list RULE $rule]
 		    }
+		    default {
+			error "in planExecutionForComponent: can't happen"
+		    }
 		}
 	    }
 	}
@@ -611,29 +619,7 @@ oo::class create bdd::datalog::program {
 
 	# Score the predicates according to the degrees of the dependency
 	# graph.
-	foreach rule $loops {
-	    set lhPredicate [lindex $rule 0 1]
-	    foreach subgoal [lrange $rule 1 end] {
-		switch -exact -- [lindex $subgoal 0] {
-		    EQUALITY {	# does not introduce a dependency
-			continue
-		    }
-		    NOT {
-			set rhPredicate [lindex $subgoal 1 1]
-		    }
-		    LITERAL {
-			set rhPredicate [lindex $subgoal 1]
-		    }
-		    default {
-			error "in [info level 0]: can't happen."
-		    }
-		}
-		if {[lsearch -exact $component $rhPredicate] >= 0} {
-		    dict incr delta $lhPredicate 1; # edge into lhPredicate
-		    dict incr delta $rhPredicate -1; # edge out of rhPredicate
-		}
-	    }
-	}
+	set delta [my rankComponentMembers $component $loops]
 
 	# Find the predicate with the high score
 	set maxDelta -Inf
@@ -670,6 +656,55 @@ oo::class create bdd::datalog::program {
 	return [list LOOP $toRemove $bodyCode]
 		    
     }
+
+    # Method: rankComponentMemebers
+    #
+    #	Ranks members of a connected component in the predicate dependency
+    #   graph for selection of loop headers.
+    #
+    # Parameters:
+    #	components - Set of predicates in the connected component
+    #	loops - Set of rules in the connected component that must be iterated.
+    #
+    # Results:
+    #	Returns a dictionary whose keys are predicates and whose values are
+    #	scores. The high-scoring predicate is the one that will be removed.
+    #
+    # The heuristic in play is from TODO: [citation needed]. It is to
+    # compare the in-degree and out-degree of the predicate in the
+    # dependency graph. The one with the highest (in-out) is the one
+    # that will remove the most edges from the component if the
+    # loop is broken there, and hence is likely to simplify the graph.
+    # (The paper quantifies how close the result is to optimum.)
+
+    method rankComponentMembers {component loops} {
+	set delta {}
+	foreach rule $loops {
+	    set lhPredicate [lindex $rule 0 1]
+	    foreach subgoal [lrange $rule 1 end] {
+		switch -exact -- [lindex $subgoal 0] {
+		    EQUALITY {	# does not introduce a dependency
+			continue
+		    }
+		    NOT {
+			set rhPredicate [lindex $subgoal 1 1]
+		    }
+		    LITERAL {
+			set rhPredicate [lindex $subgoal 1]
+		    }
+		    default {
+			error "in [info level 0]: can't happen."
+		    }
+		}
+		if {[lsearch -exact $component $rhPredicate] >= 0} {
+		    dict incr delta $lhPredicate 1; # edge into lhPredicate
+		    dict incr delta $rhPredicate -1; # edge out of rhPredicate
+		}
+	    }
+	}
+	return $delta
+    }
+    
 
     # Method: ruleDependsOn
     #
@@ -711,7 +746,7 @@ oo::class create bdd::datalog::program {
     method subgoalDependsOn {subgoal predicates} {
 	switch -exact -- [lindex $subgoal 0] {
 	    EQUALITY {
-		return false
+		return 0
 	    }
 	    NOT {
 		if {[my subgoalDependsOn [lindex $subgoal 1] $predicates]} {
@@ -730,6 +765,21 @@ oo::class create bdd::datalog::program {
 	}
     }
 
+    # Method: translateExecutionPlan
+    #
+    #	Once an execution plan has been constructed, translates it to
+    #	three-address code.
+    #
+    # Parameters:
+    #	db - Database on which the plan will be executed. The input and
+    #	     output relations, and all columns appearing in the code,
+    #	     must be defined.
+    #	plan - Execution plan, a list of FACT, RULE, LOOP, and QUERY
+    #	       subplans, as returned from 'planExecution'
+    #
+    # Results:
+    #	Returns a list of three-address instructions.
+
     method translateExecutionPlan {db plan} {
 	foreach step $plan {
 	    switch -exact -- [lindex $step 0] {
@@ -740,7 +790,7 @@ oo::class create bdd::datalog::program {
 		    my translateLoop $db [lindex $step 1] [lindex $step 2]
 		} 
 		QUERY {
-		    my translateQuery $db [lindex $step 1] [lindex $step 2]
+		    my translateQuery $db [lindex $step 1]
 		}
 		RULE {
 		    my translateRule $db [lindex $step 1]
@@ -753,9 +803,31 @@ oo::class create bdd::datalog::program {
 	return $intcode
     }
 
+    # Method: translateFact
+    #
+    #	Translates a fact in the execution plan to three-address code
+    #
+    # Parameters:
+    #	db - Database on which the plan will be executed. The input and
+    #	     output relations, and all columns appearing in the code,
+    #	     must be defined.
+    #	fact - Literal representing the fact to be translated.
+    #	cols - If supplied, list of names of the columns of the
+    #	       relation representing $fact's predicate.
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Appends three-addres instructions to 'intcode'
+
     method translateFact {db fact {cols {}}} {
-	lappend intcode "# [bdd::datalog::prettyprint-literal $fact]"
+
 	set predicate [lindex $fact 1]
+
+	# Retrieve the set of columns in the output relation if not supplied
+	# by the caller.
+
 	if {$cols eq {}} {
 	    db relationMustExist $predicate
 	    set cols [$db columns $predicate]
@@ -766,13 +838,20 @@ oo::class create bdd::datalog::program {
 		    "$predicate has a different number of columns from $ppfact"
 	    }
 	}
+
+	# Examine the terms of the literal, and extract the list of
+	# columns for which specific vales have been supplied, and the
+	# list of columns that have 'don't care' values: unbound variables
+	# or _.
+
 	set probeColumns {}
+	set probeValues {}
 	set dontCareColumns {}
 	foreach term [lrange $fact 2 end] col $cols {
 	    switch -exact [lindex $term 0] {
 		CONSTANT {
 		    lappend probeColumns $col
-		    lappend probeValues $term
+		    lappend probeValues [lindex $term 1]
 		}
 		VARIABLE {
 		    if {[lindex $term 1] ne {_}} {
@@ -784,56 +863,94 @@ oo::class create bdd::datalog::program {
 		}
 	    }
 	}
+
+	# Complain if no variables in the literal are bound.
+
 	if {$probeColumns eq {}} {
 	    set ppfact [bdd::datalog::prettyprint-literal $fact]
 	    puts stderr "warning: fact $ppfact. asserts the universal set"
 	    lappend intcode \
 		[list SET $predicate _]
 	} else {
+
+	    # If there are 'don't cares', then make a relation for the
+	    # bound values, a universal relation for the 'don't cares',
+	    # join the two, and then union the result into the relation
+	    # under construction.
+
 	    if {$dontCareColumns ne {}} {
 		set probeRelation [my gensym #T]
 		set dontCareRelation [my gensym #T]
 		set joinedRelation [my gensym #T]
 		lappend intcode \
-		    [list RELATION $probeRelation $probeColumns]
-		lappend intcode \
-		    [list LOAD $probeRelation $probeValues]
-		lappend intcode \
-		    [list RELATION $dontCareRelation $dontCareColumns]
-		lappend intcode \
-		    [list SET $dontCareRelation _]
-		lappend intcode \
-		    [list RELATION $joinedRelation $cols]
-		lappend intcode \
-		    [list JOIN $joinedRelation $probeRelation $dontCareRelation]
-		lappend intcode \
+		    [list RELATION $probeRelation $probeColumns] \
+		    [list LOAD $probeRelation $probeValues] \
+		    [list RELATION $dontCareRelation $dontCareColumns] \
+		    [list SET $dontCareRelation _] \
+		    [list RELATION $joinedRelation $cols] \
+		    [list JOIN $joinedRelation \
+			 $probeRelation $dontCareRelation] \
 		    [list UNION $predicate $predicate $joinedRelation]
 	    } else {
+
+		# If there are no 'don't cares', then load the literal
+		# directly into the relation under construction.
+
 		lappend intcode \
 		    [list LOAD $predicate $probeValues]
 	    }
 	}
     }
 
+    # Method: translateLoop
+    #
+    #	Generates three-address code for rules with a cyclic dependency,
+    #	iterating to a fixed point.
+    #
+    # Parameters:
+    #	db - Database on which the plan will be executed. The input and
+    #	     output relations, and all columns appearing in the code,
+    #	     must be defined.
+    #   predicate - Predicate to test for a fixed point.
+    #	body - Execution plan for the loop body.
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
     method translateLoop {db predicate body} {
-	# TODO - Incrementalization?
-	set comparison [my gensym #T]
+
 	db relationMustExist $predicate
 	set cols [$db columns $predicate]
+	set comparison [my gensym #T]
+
+	# Create a temporary relation to record the old value of
+	# predicate for convergence testing.
 	lappend intcode [list RELATION $comparison $cols]
+
+	# Mark the top of the loop
 	set where [llength $intcode]
 	lappend intcode BEGINLOOP
+
+	# Save the value of the relation being iterated
 	lappend intcode [list SET $comparison $predicate]
+
+	# Translate the loop body
 	my translateExecutionPlan $db $body
+
+	# Translate the loop footer.
 	lappend intcode [list ENDLOOP $comparison $predicate $where]
     }
 
     method translateQuery {db query} {
-	# TODO: Destub
+	lassign [my translateSubgoal $db $query {} {}] tempRelation tempColumns
+	lappend intcode [list RESULT $tempRelation $tempColumns]
+	
     }
 
     method translateRule {db rule} {
-	lappend intcode "# [::bdd::datalog::prettyprint-rule $rule]"
 	set tempRelation {}
 	set tempColumns {}
 	foreach subgoal [lrange $rule 1 end] {
@@ -855,7 +972,9 @@ oo::class create bdd::datalog::program {
 		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
 	    }
 	    EQUALITY {
-		# TODO - what to do here?
+		tailcall my translateEquality $db \
+		    [lindex $subgoal 1] [lindex $subgoal 2] \
+		    $dataSoFar $columnsSoFar
 	    }
 	    LITERAL {
 		lassign \
@@ -868,6 +987,26 @@ oo::class create bdd::datalog::program {
 	    default {
 		error "in translateSubgoal: can't happen"
 	    }
+	}
+    }
+
+    method translateEquality {db var1 var2 dataSoFar columnsSoFar} {
+	set col1 [lindex $var1 1]
+	set col2 [lindex $var2 1]
+	set equality [my gensym #T]
+	lappend intcode \
+	    [list RELATION $equality [list $col1 $col2]] \
+	    [list EQUALITY $equality $col1 $col2]
+	if {$dataSoFar eq {}} {
+	    return [list $equality [list $col1 $col2]]
+	} else {
+	    set joined [my gensym #T]
+	    lappend columnsSoFar $col1 $col2
+	    set columnsSoFar [lsort -dictionary -unique $columnsSoFar]
+	    lappend intcode \
+		[list RELATION $joined $columnsSoFar] \
+		[list JOIN $joined $dataSoFar $equality]
+	    return [list $joined $columnsSoFar]
 	}
     }
 
@@ -895,6 +1034,7 @@ oo::class create bdd::datalog::program {
 		CONSTANT {
 		    lappend selectLiteral $term
 		    set needSelect 1
+		    set needProject 1
 		}
 		VARIABLE {
 		    set varName [lindex $term 1]
@@ -914,6 +1054,7 @@ oo::class create bdd::datalog::program {
 		}
 	    }
 	}
+
 	if {$needSelect} {
 	    lappend intcode [list RELATION $selector $cols]
 	    my translateFact $db $selectLiteral $cols
@@ -923,8 +1064,9 @@ oo::class create bdd::datalog::program {
 	    set projectSource $predicate
 	}
 	if {$needProject} {
-	    lappend intcode [list RELATION $projector $projectColumns]
-	    lappend intcode [list PROJECT $projector $projectSource]
+	    lappend intcode \
+		[list RELATION $projector $projectColumns] \
+		[list PROJECT $projector $projectSource]
 	    set renameSource $projector
 	} else {
 	    set renameSource $projectSource
@@ -957,9 +1099,9 @@ oo::class create bdd::datalog::program {
 	    lappend resultColumns {*}$columnsThisOp
 	    set resultColumns [lsort -unique -dictionary $resultColumns]
 	    set resultRelation [my gensym #T]
-	    lappend intcode [list RELATION $resultRelation $resultColumns]
-	    lappend intcode [list $operation $resultRelation \
-				 $dataSoFar $dataThisOp]
+	    lappend intcode \
+		[list RELATION $resultRelation $resultColumns] \
+		[list $operation $resultRelation $dataSoFar $dataThisOp]
 	}
 	return [list $resultRelation $resultColumns]
     }
@@ -1027,8 +1169,9 @@ oo::class create bdd::datalog::program {
 	    }
 	}
 	if {$needProject} {
-	    lappend intcode [list RELATION $projector $projectColumns]
-	    lappend intcode [list PROJECT $projector $sourceRelation]
+	    lappend intcode \
+		[list RELATION $projector $projectColumns] \
+		[list PROJECT $projector $sourceRelation]
 	    set renameSource $projector
 	} else {
 	    set renameSource $sourceRelation
@@ -1036,6 +1179,7 @@ oo::class create bdd::datalog::program {
 
 	# Rename columns from literal to destination.
 	if {[llength $renamedFrom] > 0} {
+	    set renamed [my gensym \#T]
 	    lappend intcode [list RELATION $renamed $renamedColumns]
 	    set renameCommand [list RENAME $renamed $renameSource]
 	    foreach to $renamedTo from $renamedFrom {
@@ -1055,8 +1199,9 @@ oo::class create bdd::datalog::program {
 	    my translateFact $db $constantLiteral $constantColumns
 	    lappend joinColumns {*}$constantColumns
 	    set joined [my gensym #T]
-	    lappend intcode [list RELATION $joined $joinColumns]
-	    lappend intcode [list JOIN $joined $joinSource $constant]
+	    lappend intcode \
+		[list RELATION $joined $joinColumns] \
+		[list JOIN $joined $joinSource $constant]
 	    set joinSource $joined
 	}
 
@@ -1064,12 +1209,14 @@ oo::class create bdd::datalog::program {
 
 	if {[llength $dontCareColumns] > 0} {
 	    set dontCareRelation [my gensym #T]
-	    lappend intcode [list RELATION $dontCareRelation $dontCareColumns]
-	    lappend intcode [list SET $dontCareRelation _]
+	    lappend intcode \
+		[list RELATION $dontCareRelation $dontCareColumns] \
+		[list SET $dontCareRelation _]
 	    lappend joinColumns {*}$dontCareColumns
 	    set joined [my gensym #T]
-	    lappend intcode [list RELATION $joined $joinColumns]
-	    lappend intcode [list JOIN $joined $joinSource $dontCareRelation]
+	    lappend intcode \
+		[list RELATION $joined $joinColumns] \
+		[list JOIN $joined $joinSource $dontCareRelation]
 	    set joinSource $joined
 
 	}
@@ -1077,6 +1224,114 @@ oo::class create bdd::datalog::program {
 	# Union the result into the destination
 	lappend intcode [list UNION $predicate $predicate $joinSource]
 	
+    }
+
+    method generateCode {db icode args} {
+
+	set loaders {}
+
+	set prologue \n
+	set body \n
+	set epilogue \n
+
+	set ind0 {    }
+	set ind {    }
+
+	#append body $ind {puts {Start evaluation!}} \n
+	foreach instr $icode {
+	    # append body $ind [list puts $instr] \n
+	    switch -exact -- [lindex $instr 0] {
+		RELATION {
+		    $db relation [lindex $instr 1] {*}[lindex $instr 2]
+		    append prologue $ind0 [$db set [lindex $instr 1] {}] \n
+		    append epilogue $ind0 [$db set [lindex $instr 1] {}] \n
+		}
+		
+		ANTIJOIN {
+		    append body $ind \
+			[$db antijoin {*}[lrange $instr 1 end]] \n
+		}
+		BEGINLOOP {
+		    append body $ind "while 1 \{\n"
+		    set ind "$ind    "
+		}
+		ENDLOOP {
+		    set command [$db === [lindex $instr 1] [lindex $instr 2]]
+		    append body \
+			$ind if { } \{ \[ $command \] \} { } break \n
+		    set ind [string replace $ind end-3 end]
+		    append body $ind "\}" \n
+		}
+		EQUALITY {
+		    append body $ind \
+			[$db equate {*}[lrange $instr 1 end]] \n
+		}
+		JOIN {
+		    append body $ind \
+			[$db join {*}[lrange $instr 1 end]] \n
+		}
+		LOAD {
+		    # append body $ind # $instr \n
+		    set relation [lindex $instr 1]
+		    if {![dict exists $loaders $relation]} {
+			dict set loaders $relation [$db loader $relation]
+		    }
+		    append body $ind \
+			[dict get $loaders $relation]
+		    foreach val [lindex $instr 2] {
+			switch -exact -- [lindex $val 0] {
+			    INTEGER {
+				append body { } [lindex $val 1]
+			    }
+			    TCLVAR {
+				append body { } \$ [lindex $val 1]
+			    }
+			    default {
+				error "in generateCode: can't happen"
+			    }
+			}
+		    }
+		    append body \n
+		}
+		NEGATE {
+		    append body $ind \
+			[$db negate {*}[lrange $instr 1 end]] \n
+		}
+		PROJECT {
+		    append body $ind \
+			[$db project {*}[lrange $instr 1 end]] \n
+		}
+		RENAME {
+		    append body $ind \
+			[$db replace {*}[lrange $instr 1 end]] \n
+		}
+		SET {
+		    append body $ind \
+			[$db set {*}[lrange $instr 1 end]] \n
+		}
+		UNION {
+		    append body $ind \
+			[$db union {*}[lrange $instr 1 end]] \n
+		}
+
+		RESULT {
+		    if {[llength $args] != 2} {
+			error "wrong # args"; # TODO - better reporting
+		    }
+		    append body \
+			[list $db enumerate [lindex $args 0] \
+			     [lindex $instr 1] \
+			     [lindex $args 1]] \n
+		}
+
+		default {
+		    error "in generateCode: can't happen"
+		}
+	    }
+
+	}
+	return $prologue$body$epilogue
+
     }
 
     method getRule {ruleNo} {
@@ -1265,7 +1520,7 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
     return
 }
 
-proc bdd::datalog::compileProgram {db programText} {
+proc bdd::datalog::compileProgram {db programText args} {
 
     variable parser
 
@@ -1280,16 +1535,20 @@ proc bdd::datalog::compileProgram {db programText} {
 	set parseTree [$parser parse $tokens $values $program]
 	
 	# Extract the facts, rules, and edges joining the rules from the parse
-	set facts [$program getFacts]
-	set rules [$program getRules]
-	set outedges [$program getEdges]
+	if 0 {
+	    set facts [$program getFacts]
+	    set rules [$program getRules]
+	    set outedges [$program getEdges]
+	}
 	
 	set plan [$program planExecution]
 
-	# TODO - need to clear executionPlan?
-	set result [$program translateExecutionPlan $db $plan]
+	set intcode [$program translateExecutionPlan $db $plan]
 
-	# TODO - This sequence needs refactoring
+	# TODO: Here is where optimization should happen. And optimization
+	#       can be helped with Datalog?
+
+	set result [$program generateCode $db $intcode {*}$args]
 
     } finally {
 
@@ -1418,6 +1677,7 @@ source [file join [file dirname [info script]] .. examples loadProgram.tcl]
 source [file join [file dirname [info script]] .. examples program1.tcl]
 
 set vars [analyzeProgram $program db]
+set vnames [dict keys $vars]
 
 db relation seq st st2
 db relation writes st v
@@ -1425,26 +1685,26 @@ db relation flowspast v st st2
 db relation reaches v st st2
 db relation uninitRead st v
 db relation deadWrite st v
+# db relation induction v st
 
-set i 0
-foreach step [bdd::datalog::compileProgram db {
+proc reaching_defs {} [bdd::datalog::compileProgram db {
  
     % A false entry node (node 0) sets every variable and flows
     % to node 1. If any of its variables are reachable, those are
     % variables possibly used uninitialized in the program.
 
-    writes($startNode, _).
+    writes(0, _).
     writes(st,v) :- writes0(st,v).
-    seq($startNode, 1).
+    seq(0, 1).
     seq(st,st2) :- seq0(st,st2).
 
     % flowspast(v,st,st2) means that control passes from the exit of st
     % to the entry of st2 without altering the value of v
 
     flowspast(_, st, st2) :- seq(st, st2).
-    flowspast(v, st, st2) :- flowspast(v, st, st3),
-                             !writes(st3, v),
-                             flowspast(v, st3, st2).
+    flowspast(v, st3, st2) :- flowspast(v, st3, st),
+                             !writes(st, v),
+                             flowspast(v, st, st2).
 
     % reaches(v,st,st2) means that st assigns a value to v, which
     % reaches st2, which reads the value of v : that is, st is a
@@ -1455,28 +1715,44 @@ foreach step [bdd::datalog::compileProgram db {
     % A variable read that is reachable from the entry is a read of a
     % possibly uninitialized variable
 
-    uninitRead(st, v) :- reaches(v, $startNode, st).
-
-    % The following statement is nonsense, but tests a constant in the head.
-
-    uninitRead(st, $ENV) :- reads(st, $ENV).
+    uninitRead(st, v) :- reaches(v, 0, st).
 
     % A variable write that reaches nowhere else is dead code
 
     deadWrite(st, v) :- writes(st, v), !reaches(v, st, _).
 
-    % Also do the bddbddb example. Only 1 stratum, but 2 loops in the larger SCC
+}]
 
-    % vP(v, h) :- vP0(v,h).
-    % vP(v1,h) :- assign(v1,v2), vP(v2,h).
-    % hP(h1,f,h2) :- store(v1,f,v2), vP(v1,h1), vP(v2,h2).
-    % vP(v2,h2) :- load(v1,f,v2), vP(v1,h1), hP(h1,f,h2).
+# Report which variable definitions reach statement $i
+proc query1 {i} [bdd::datalog::compileProgram db {
+    reaches(v, st, $i)?
+} d {
+    lappend ::flowsto [lindex $::vnames [dict get $d v]] [dict get $d st]
+}]
 
-    % Compile dead code query
+# Report which variable uses flow from statement $i
+proc query2 {i} [bdd::datalog::compileProgram db {
+    reaches(v, $i, st)?
+} d {
+    lappend ::flowsfrom [lindex $::vnames [dict get $d v]] [dict get $d st]
+}]
+    
+puts [info body reaching_defs]
 
-    deadWrite(st, v)?
-
-}] {
-    puts "$i: $step"
+reaching_defs
+puts [format {%-16s %2s  %-32s %-16s} PRODUCERS {} INSTRUCTIONS CONSUMERS]
+set i 0
+foreach stmt $program {
+    set flowsto {}
+    query1 $i
+    set flowsfrom {}
+    query2 $i
+    puts [format "%-16s %2d: %-32s %-16s" \
+	      [lsort -stride 2 -index 0 -ascii \
+		   [lsort -stride 2 -index 1 -integer $flowsto]] \
+	      $i \
+	      $stmt \
+	      [lsort -stride 2 -index 0 -ascii \
+		   [lsort -stride 2 -index 1 -integer $flowsfrom]]]
     incr i
 }

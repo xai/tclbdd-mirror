@@ -731,6 +731,38 @@ oo::class create bdd::fddd::database {
 	return $cmd
     }
 
+    # Method: negate
+    #
+    #	Generates code to compute the complement of a relation. All
+    #	tuples over the relation's domain will be in the output relation
+    #	if they are not in the input
+    #
+    # Usage:
+    #	$db union $dest $source
+    #
+    # Parameters:
+    #	dest    - Name of the relation that will receive the complement
+    #   source1 - Name of the input relation
+    #
+    # Results:
+    #	Returns a burst of code that computes the complement of the
+    #   relation
+    #
+    # Both relations must contain the same set of columns.
+    #
+    # This method does not compute the complement; it returns a fragment
+    # of code that computes it.
+    #
+    # The time taken to compute the complement is linear in the 
+    # size of the BDD.
+
+    method negate {dest source} {
+	my relationMustExist $dest
+	my relationMustExist $source
+	my ColumnsMustBeSame $dest $source
+	return [list [namespace which sys] ~ $dest $source]
+    }
+
     # Method: profile
     #
     #	Determines the number of BDD beads in use for each variable.
