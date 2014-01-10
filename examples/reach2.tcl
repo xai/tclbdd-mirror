@@ -15,7 +15,7 @@ db relation reaches v st st2
 db relation uninitRead st v
 db relation deadWrite st v
 
-proc reaching_defs {} [bdd::datalog::compileProgram db {
+proc reaching_defs {} [bdd::datalog::compileProgram db {} {
  
     % A false entry node (node 0) sets every variable and flows
     % to node 1. If any of its variables are reachable, those are
@@ -49,20 +49,28 @@ proc reaching_defs {} [bdd::datalog::compileProgram db {
 
     deadWrite(st, v) :- writes(st, v), !reaches(v, st, _).
 
-}]
+} {}]
 
 # Report which variable definitions reach statement $i
 proc query1 {i} [bdd::datalog::compileProgram db {
+    set flowsto {}
+} {
     reaches(v, st, $i)?
 } d {
-    lappend ::flowsto [lindex $::vnames [dict get $d v]] [dict get $d st]
+    lappend flowsto [lindex $::vnames [dict get $d v]] [dict get $d st]
+} {
+    return $flowsto
 }]
 
 # Report which variable uses flow from statement $i
 proc query2 {i} [bdd::datalog::compileProgram db {
+    set flowsfrom {}
+} {
     reaches(v, $i, st)?
 } d {
-    lappend ::flowsfrom [lindex $::vnames [dict get $d v]] [dict get $d st]
+    lappend flowsfrom [lindex $::vnames [dict get $d v]] [dict get $d st]
+} {
+    return $flowsfrom
 }]
     
 puts [info body reaching_defs]
@@ -71,10 +79,8 @@ reaching_defs
 puts [format {%-16s %2s  %-32s %-16s} PRODUCERS {} INSTRUCTIONS CONSUMERS]
 set i 0
 foreach stmt $program {
-    set flowsto {}
-    query1 $i
-    set flowsfrom {}
-    query2 $i
+    set flowsto [query1 $i]
+    set flowsfrom [query2 $i]
     puts [format "%-16s %2d: %-32s %-16s" \
 	      [lsort -stride 2 -index 0 -ascii \
 		   [lsort -stride 2 -index 1 -integer $flowsto]] \

@@ -1519,7 +1519,9 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
     return
 }
 
-proc bdd::datalog::compileProgram {db programText args} {
+proc bdd::datalog::compileProgram {db prelude programText args} {
+
+    set postlude [lindex $args end]
 
     variable parser
 
@@ -1532,22 +1534,18 @@ proc bdd::datalog::compileProgram {db programText args} {
 	
 	# Parse the program
 	set parseTree [$parser parse $tokens $values $program]
-	
-	# Extract the facts, rules, and edges joining the rules from the parse
-	if 0 {
-	    set facts [$program getFacts]
-	    set rules [$program getRules]
-	    set outedges [$program getEdges]
-	}
-	
+
+	# Plan the execution
 	set plan [$program planExecution]
 
+	# Translate the execution plan to relational algebra
 	set intcode [$program translateExecutionPlan $db $plan]
 
-	# TODO: Here is where optimization should happen. And optimization
-	#       can be helped with Datalog?
-
-	set result [$program generateCode $db $intcode {*}$args]
+	# Generate code
+	append result \
+	    $prelude \n \
+	    [$program generateCode $db $intcode {*}[lrange $args 0 end-1]] \n \
+	    $postlude
 
     } finally {
 

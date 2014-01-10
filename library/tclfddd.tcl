@@ -596,14 +596,14 @@ oo::class create bdd::fddd::database {
 	    lappend vlist $v $v2
 	}
 	set vlist [lsort -stride 2 -integer -index 0 -decreasing $vlist]
-	set code [list sys := $dest 1]
+	set code [list [namespace which sys] := $dest 1]
 	foreach {v v2} $vlist {
-	    append code \; [list sys nthvar :a $v]
-	    append code \; [list sys nthvar :b $v2]
-	    append code \; [list sys == :t :a :b]
-	    append code \; [list sys & $dest $dest :t]
+	    append code \; [list [namespace which sys] nthvar :a $v]
+	    append code \; [list [namespace which sys] nthvar :b $v2]
+	    append code \; [list [namespace which sys] == :t :a :b]
+	    append code \; [list [namespace which sys] & $dest $dest :t]
 	}
-	append code \; [list sys unset :a :b :t]
+	append code \; [list [namespace which sys] unset :a :b :t]
 	return $code
     }
 
