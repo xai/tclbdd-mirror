@@ -76,6 +76,8 @@ TEA_ADD_LIBS([])
 TEA_ADD_CFLAGS([])
 TEA_ADD_STUB_SOURCES([])
 TEA_ADD_TCL_SOURCES([library/tclbdd.tcl library/tclfddd.tcl])
+TEA_ADD_TCL_SOURCES([library/datalog.tcl library/coroutine_corovar.tcl])
+TEA_ADD_TCL_SOURCES([library/coroutine_iterator.tcl])
 
 #--------------------------------------------------------------------
 #

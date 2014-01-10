@@ -1,4 +1,4 @@
-source loadscript.tcl
+if {[file exists loadscript.tcl]} {source loadscript.tcl}
 
 package require tclbdd::datalog
 
