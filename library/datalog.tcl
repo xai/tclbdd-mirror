@@ -189,6 +189,12 @@ set bdd::datalog::parser \
 	    [list VARIABLE [lindex $_ 2]]
     }
 
+    equality	::=	variable ! = variable
+    {
+	list INEQUALITY [list VARIABLE [lindex $_ 0]] \
+	    [list VARIABLE [lindex $_ 3]]
+    }
+
     # A predicate symbol is either a bare identifier or a quoted string
 
     predicate_symbol ::= IDENTIFIER			{}
@@ -246,6 +252,10 @@ proc bdd::datalog::prettyprint-subgoal {subgoal} {
 	EQUALITY {
 	    set s [prettyprint-variable [lindex $subgoal 1]]
 	    append s = [prettyprint-variable [lindex $subgoal 2]]
+	}
+	INEQUALITY {
+	    set s [prettyprint-variable [lindex $subgoal 1]]
+	    append s != [prettyprint-variable [lindex $subgoal 2]]
 	}
 	NOT {
 	    set s !
@@ -404,7 +414,8 @@ oo::class create bdd::datalog::program {
 	foreach subgoal [lrange $rule 1 end] {
 	    incr i
 	    switch -exact -- [lindex $subgoal 0] {
-		EQUALITY { 	# does not create a dependency
+		EQUALITY -
+		INEQUALITY { 	# does not create a dependency
 		    continue
 		}
 		LITERAL {
@@ -682,7 +693,8 @@ oo::class create bdd::datalog::program {
 	    set lhPredicate [lindex $rule 0 1]
 	    foreach subgoal [lrange $rule 1 end] {
 		switch -exact -- [lindex $subgoal 0] {
-		    EQUALITY {	# does not introduce a dependency
+		    EQUALITY - 
+		    INEQUALITY {	# does not introduce a dependency
 			continue
 		    }
 		    NOT {
@@ -744,7 +756,8 @@ oo::class create bdd::datalog::program {
 
     method subgoalDependsOn {subgoal predicates} {
 	switch -exact -- [lindex $subgoal 0] {
-	    EQUALITY {
+	    EQUALITY -
+	    INEQUALITY {
 		return 0
 	    }
 	    NOT {
@@ -970,8 +983,9 @@ oo::class create bdd::datalog::program {
 		tailcall my translateSubgoalEnd $db ANTIJOIN \
 		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
 	    }
-	    EQUALITY {
-		tailcall my translateEquality $db \
+	    EQUALITY -
+	    INEQUALITY {
+		tailcall my translateEquality $db [lindex $subgoal 0] \
 		    [lindex $subgoal 1] [lindex $subgoal 2] \
 		    $dataSoFar $columnsSoFar
 	    }
@@ -989,14 +1003,14 @@ oo::class create bdd::datalog::program {
 	}
     }
 
-    method translateEquality {db var1 var2 dataSoFar columnsSoFar} {
+    method translateEquality {db operation var1 var2 dataSoFar columnsSoFar} {
 	set col1 [lindex $var1 1]
 	set col2 [lindex $var2 1]
 	set equality [my gensym #T]
 	lappend intcode \
 	    [list RELATION $equality [list $col1 $col2]] \
-	    [list EQUALITY $equality $col1 $col2]
-	if {$dataSoFar eq {}} {
+	    [list $operation $equality $col1 $col2]
+	if {$columnsSoFar eq {}} {
 	    return [list $equality [list $col1 $col2]]
 	} else {
 	    set joined [my gensym #T]
@@ -1236,9 +1250,7 @@ oo::class create bdd::datalog::program {
 	set ind0 {    }
 	set ind {    }
 
-	#append body $ind {puts {Start evaluation!}} \n
 	foreach instr $icode {
-	    # append body $ind [list puts $instr] \n
 	    switch -exact -- [lindex $instr 0] {
 		RELATION {
 		    $db relation [lindex $instr 1] {*}[lindex $instr 2]
@@ -1264,6 +1276,10 @@ oo::class create bdd::datalog::program {
 		EQUALITY {
 		    append body $ind \
 			[$db equate {*}[lrange $instr 1 end]] \n
+		}
+		INEQUALITY {
+		    append body $ind \
+			[$db inequality {*}[lrange $instr 1 end]] \n
 		}
 		JOIN {
 		    append body $ind \

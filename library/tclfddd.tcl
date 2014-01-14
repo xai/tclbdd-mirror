@@ -1,3 +1,16 @@
+# tclfddd.tcl --
+#
+#	Class definitions and Tcl-level methods for the bdd::fddd package:
+#	Binary Decision Diagram (BDD) implementation of Finite Domain
+#	Decision Diagrams (FDDD's).
+#
+# Copyright (c) 2014 by Kevin B. Kenny
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
+#------------------------------------------------------------------------------
+
 package require tclbdd 0.1
 
 namespace eval bdd::fddd {
@@ -649,6 +662,78 @@ oo::class create bdd::fddd::database {
 
     method gc {} {
 	return [sys gc]
+    }
+
+    # Method: inequality
+    #
+    #	Generates code for an inequality constraint 
+    #
+    # Usage:
+    #	db inequality dest col1 col2
+    #
+    # Parameters:
+    #	dest - Name of a relation that will contain one row for each
+    #          value in its domain that has col1 != col2
+    #   col1 - Name of the first column to compare
+    #   col2 - Name of the second column to compare
+    #
+    # Results:
+    #	Returns a fragment of code that creates the given relation.
+    #
+    # The destination relation must contain both col1 and col2 as columns.
+    # The domains of col1 and col2 must have the same size.
+    #
+    # This method does not create the inequality relation; it returns a fragment
+    # of code that does it.
+    #
+    # The time taken to create the inequality is highly variable. In the case
+    # where the two columns' variables are interleaved, the time is linear
+    # in the number of bits of the domains. In the case where they are
+    # concatenated, both time and space are exponential in the number of
+    # variables. Other orderings will give results between these two extremes.
+
+    method inequality {dest col1 col2} {
+	my relationMustExist $dest
+	my columnMustExist $col1
+	my columnMustExist $col2
+	set destcolumns [dict get $m_relcolumns $dest]
+	if {[lsearch -exact $destcolumns $col1] == -1} {
+	    return -code error -errorcode \
+		[list FDDD RelationDoesNotContainColumn $dest $col1] \
+		"relation \"$dest\" does not contain column \"$col1\""
+	}
+	if {[lsearch -exact $destcolumns $col2] == -1} {
+	    return -code error -errorcode \
+		[list FDDD RelationDoesNotContainColumn $dest $col1] \
+		"relation \"$dest\" does not contain column \"$col1\""
+	}
+	set vars1 [dict get $m_columns $col1]
+	set vars2 [dict get $m_columns $col2]
+	if {[llength $vars1] != [llength $vars2]} {
+	    return -code error \
+		-errorcode [list FDDD EquateWrongDomains $col1 $col2] \
+		"cannot equate domains \"$col1\" and \"$col2\":\
+                 sizes do not match"
+	}
+
+	# Sort the variables in descending order by the first column's
+	# positions. This will keep them ordered well for the rename in
+	# the easy cases.
+
+	set vlist {}
+	foreach v $vars1 v2 $vars2 {
+	    lappend vlist $v $v2
+	}
+	set vlist [lsort -stride 2 -integer -index 0 -decreasing $vlist]
+	set code [list [namespace which sys] := $dest 0]
+	foreach {v v2} $vlist {
+	    append code \; [list [namespace which sys] nthvar :a $v]
+	    append code \; [list [namespace which sys] nthvar :b $v2]
+	    append code \; [list [namespace which sys] != :t :a :b]
+	    append code \; [list [namespace which sys] | $dest $dest :t]
+	}
+	append code \; [list [namespace which sys] unset :a :b :t]
+	return $code
     }
 
     # Method: join
