@@ -1989,7 +1989,7 @@ BddSystemQuantifyMethod(
  *	Replaces a set of variables in a BDD with other variables.
  *
  * Usage:
- *	$system project result vars vars2 expr
+ *	$system replace result vars vars2 expr
  *
  * Parameters:
  *	system - System of BDD's
@@ -2005,9 +2005,9 @@ BddSystemQuantifyMethod(
  * Side effects:
  *	Creates the named expression if successful
  *
- * This is the same operation as existential quantification. It is provided
- * for the convenience of Finite Domain Decision Diagrams, where it exists
- * as the relational 'project' operator.
+ * This is the same operation as composition. It is provided for the
+ * convenience of Finite Domain Decision Diagrams, where it exists as
+ * the relational 'replace' operator.
  *
  *-----------------------------------------------------------------------------
  */
@@ -2151,7 +2151,7 @@ BddSystemReplaceMethod(
  *	None
  *
  * Side effects:
- *	Assigns the negation of the given variable to the new name
+ *	Assigns the result of the restriction to the new name.
  *
  *-----------------------------------------------------------------------------
  */
@@ -2293,8 +2293,6 @@ BddSystemSatcountMethod(
  *	$system simplify a f domain
  *
  * Parameters:
- *	OP - One of the binary operators nor, <, >, !=, ^, nand, &,
- *           ==, <=, >=, |
  *	a - Name of the result expression
  *	f - Name of the expression to simplify
  *	domain - Name of the expression describing the domain of interest

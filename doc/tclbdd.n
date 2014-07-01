@@ -1,0 +1,458 @@
+'\" bdd.n --
+'\" 
+'\"     Documentation for the 'bdd' package
+'\" 
+'\" Copyright (c) 2014 by Kevin B. Kenny
+'\" 
+'\" See the file "license.terms" for information on usage and redistribution of
+'\" this file, and for a DISCLAIMER OF ALL WARRANTIES.
+'\" .so man.macros
+'\" IGNORE
+.if t .wh -1.3i ^B
+.nr ^l \n(.l
+.ad b
+'\"	# BS - start boxed text
+'\"	# ^y = starting y location
+'\"	# ^b = 1
+.de BS
+.br
+.mk ^y
+.nr ^b 1u
+.if n .nf
+.if n .ti 0
+.if n \l'\\n(.lu\(ul'
+.if n .fi
+..
+'\"	# BE - end boxed text (draw box now)
+.de BE
+.nf
+.ti 0
+.mk ^t
+.ie n \l'\\n(^lu\(ul'
+.el \{\
+'\"	Draw four-sided box normally, but don't draw top of
+'\"	box if the box started on an earlier page.
+.ie !\\n(^b-1 \{\
+\h'-1.5n'\L'|\\n(^yu-1v'\l'\\n(^lu+3n\(ul'\L'\\n(^tu+1v-\\n(^yu'\l'|0u-1.5n\(ul'
+.\}
+.el \}\
+\h'-1.5n'\L'|\\n(^yu-1v'\h'\\n(^lu+3n'\L'\\n(^tu+1v-\\n(^yu'\l'|0u-1.5n\(ul'
+.\}
+.\}
+.fi
+.br
+.nr ^b 0
+..
+'\" END IGNORE
+.TH "bdd" n 0.1 TclBDD "Tcl Binary Decision Diagram library"
+.BS
+.SH "NAME"
+bdd \- Binary Decision Diagram (BDD) library
+.SH "SYNOPSIS"
+.nf
+package require \fBtclbdd 0.1\fR
+\fBbdd::system create \fIsystem\fR ?\fIinitSize\fR
+\fBbdd::system new ?\fIinitSize\fR
+
+\fIsystem\fR \fB:=\fR \fIresultBdd\fR \fIbdd\fR
+\fIsystem\fR \fB===\fR \fIbdd\fR \fIbdd2\fR
+\fIsystem\fR \fB~\fR \fIresultBdd\fR \fIbdd\fR
+\fIsystem\fR \fBbeadcount\fR \fIbdd\fR
+\fIsystem\fR \fBbeadindex\fR \fIbdd\fR
+\fIsystem\fR \fBcompose\fR \fIresultBdd\fR \fIbdd\fR ?\fIvarName bdd2\fR?...
+\fIsystem\fR \fBdump\fR \fIbdd\fR
+\fIsystem\fR \fBexists\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
+\fIsystem\fR \fBforall\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
+\fIsystem\fR \fBforeach_sat\fR \fItclVarName\fR \fIbdd\fR \fIscript\fR
+\fIsystem\fR \fBgc\fR
+\fIsystem\fR \fBnotnthvar\fR \fIresultBdd\fR \fIindex\fR
+\fIsystem\fR \fBnthvar\fR \fIresultBdd\fR \fIindex\fR
+\fIsystem\fR \fBprofile\fR \fIbdd\fR
+\fIsystem\fR \fBrestrict\fR \fIresultBdd\fR \fIbdd\fR ?\fIliteral\fR,,,?
+\fIsystem\fR \fBsatcount\fR \fIbdd\fR
+\fIsystem\fR \fBsatisfiable\fR \fIbdd\fR
+\fIsystem\fR \fBsimplify\fR \fIresultBdd\fR \fIbdd1\fR \fIbdd2\fR 
+\fIsystem\fR \fBsupport\fR \fIbdd\fR
+\fIsystem\fR \fBtautology\fR \fIbdd\fR
+\fIsystem\fR \fBunset\fR \fIbdd\fR
+
+\fIsystem\fR \fIbinop\fR \fIresultBdd\fR \fIbdd1\fR \fIbdd2\fR
+\fIsystem\fR \fBexists_\fR\fIbinop\fR \fIresultBdd\fR \fIvarList\fR \fIbdd1\fR \fIbdd2\fR
+\fIsystem\fR \fBforall_\fR\fIbinop\fR \fIresultBdd\fR \fIvarList\fR \fIbdd1\fR \fIbdd2\fR
+
+\fIsystem\fR \fIternop\fR \fIresultBdd\fR \fIbdd1\fR \fIbdd2\fR \fIbdd3\fR
+
+\fIsystem\fR \fBload\fR \fIresultBdd\fR \fImapping\fR \fIvalue...\fR
+\fIsystem\fR \fBproject\fR \fBresultBdd\fR \fIindexList\fR \fBbdd\fR
+\fIsystem\fR \fBreplace\fR \fBresultBdd\fR \fIindexList\fR \fIindexList2\fR \fIbdd\fR
+
+\fBbdd::foreach_fullsat\fR \fItclVar\fB \fIvarlist\fR \fIterm\fR \fIscript\fR
+.fi
+.SH "ARGUMENTS"
+.TP
+\fIbdd\fR, \fIbdd2\fR, \fIbdd3\fR...
+Names of binary decision diagrams in \fIsystem\fR.
+.TP
+\fIbinop\fR
+A binary operation, one of '!=', '&', '<', '<=', '==', '>', '>=', '^',
+'nand', 'nor', or '|'. See \fBINARY OPERATIONS\fR for the descriptions of these.
+.TP
+\fIindex\fR
+An unsigned integer index of a variable within the set of variables known
+to the BDD system. Variable indices start at 0 and increment arbitrarily. 
+Indices may be any number up to 2**31-1.
+.TP
+\fIindexList\fR, \fIindexList2\fR
+A list of integer indices designating variables in \fIsystem\fR that the
+command is to act on in a batch.
+.TP
+\fIliteral\fR
+The name of a BDD within \fIsystem\R. The name must designate a BDD 
+representing either a single variable or its negation.
+.TP
+\fImapping\fR
+A list of integers giving a mapping between the bits of the input tuple 
+and the variables in the BDD. See \fBFINITE DOMAIN DIAGRAM SUPPORT\fI for
+the details of this argument, which appears only in the \fBload\fR method.
+.TP
+\fIresultBdd\fR
+Name of a binary decision diagram that will be created in \fIsystem\fR by
+the operation of a method. If the diagram already exists, it will be 
+overwritten.
+.TP
+\fIscript\fR
+Tcl script to evaluate once per iteration over a result set.
+.TP
+\fItclVarName\fR
+Name of a Tcl variable in the caller's scope that will receive one element
+of a result set when iterating over the results.
+.TP
+\fIternop\fR
+A ternary operator, one of '&3', '^3', '?:', 'borrow', 'concur3', 'differ3',
+'even3', 'median', 'nand3', 'nor3', 'oneof3', 'twoof3', or 'or3'. See
+\fBTERNARY OPERATORS\fR for a description of these operators.
+.TP
+\fIvarList\fR
+A Tcl list containing the names of binary decision diagrams in \fIsystem\fR. 
+Each name in the list must designate a single variable (not negated).
+.TP
+\fIvarName\fR
+Name of a binary decision diagram in \fIsystem\fR that designates a single 
+variable (not negated).
+.BE
+.SH "DESCRIPTION"
+.PP
+Binary Decision Diagrams (BDD's) are a compact way to represent arbitrary
+functions of Boolean variables. They are capable of evaluating quickly, and 
+with limited memory, functions that give problems to other representations.
+For instance, parity trees, which grow exponentially in may other 
+representations of Boolean functions (such as sum-of-products or
+product-of-sums), can be managed in linear space and time on BDD's.
+.PP
+The \fBbdd::system\fR class provides a means for Tcl programs to manage
+sets of BDD's. A program can name variables, create Boolean formulas
+involving those variables, test satisfiability, and enumerate satisfying
+variable assignments. 
+.SH "CONSTRUCTING A BDD SYSTEM"
+.PP
+The program constructs a BDD system using the constructor of the \fBbdd::system\fI class.
+.PP
+.nf
+\fBbdd::system create \fIsystem\fR ?\fIinitSize\fR
+\fBbdd::system new ?\fIinitSize\fR
+.fi
+.PP
+The \fIinitSize\fR parameter gives the number of nodes to be preallocated
+for the BDD system. In most cases, this parameter may be omitted without
+harm.
+.SH "CREATING BDD'S"
+.PP
+The program creates a BDD in a system by creating one that represents a named
+variable, or the negation of a named variable.
+.PP
+.nf
+\fIsystem\fR \fBnthvar\fR \fIresultBdd\fR \fIindex\fR
+\fIsystem\fR \fBnotnthvar\fR \fIresultBdd\fR \fIindex\fR
+.fi
+.PP
+In these methods, \fIindex\fR is a zero-based index of the variable number 
+within the system. The programmer is given control over the assignment of
+variable indices because correct variable ordering is sometimes critical to
+performance.
+.PP
+In addition to the BDD's representing variables, two predefined BDD's are
+always available: \fB0\fR is the BDD whose value is always false and \fB1\fR
+is the BDD whose value is always true.
+.SH "COPYING AND NEGATING"
+.PP
+A BDD name may be assigned to another BDD, or to its logical complement, by
+the \fB:=\fR and \fB~\fR methods:
+.PP
+.nf
+\fIsystem\fR \fB:=\fR \fIresultBdd\fR \fIbdd\fR
+\fIsystem\fR \fB~\fR \fIresultBdd\fR \fIbdd\fR
+.fi
+.PP
+After these methods execute, \fIresultBdd\fR will designate either the same
+Boolean function as \fIbdd\fR, or its logical negation.
+.SH "BINARY OPERATORS"
+.PP
+Pairs of BDD's may be combined with binary operators. The resulting function
+is assigned a new name (overwriting any other function of the same name 
+in  \fIsystem\fR). The available operators are;
+.TP
+\fIsystem\fR \fB!=\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be TRUE for those variable assignments that
+make \fIbdd1\fR and \fIbdd2\fR have different values. This is the same function
+as \fB^\fR, the EXCLUSIVE OR operation.
+.TP
+\fIsystem\fR \fB&\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be the logical AND of the two input functions.
+.TP
+\fIsystem\fR \fB<\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be TRUE for those variable assignments where
+the value of \fIbdd\fR is FALSE and the value of \fIbdd2\fR is TRUE. 
+(FALSE < TRUE just as 0 < 1). 
+.TP
+\fIsystem\fR \fB<=\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be TRUE for those variable assignments where
+the value of \fIbdd\fR is FALSE the value of \fIbdd2\fR is TRUE.
+In addition to being a "less than or equal" comparison, this operator
+is also "logical implication", \fIbdd\fR->\fIbdd2\fR.
+.TP
+\fIsystem\fR \fB==\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be TRUE for those variable assignments
+where the values of \fIbdd\fR and \fIbdd2\fR are equal. This operation is
+the negation of "exclusive OR".
+.TP
+\fIsystem\fR \fB<\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be TRUE for those variable assignments where
+the value of \fIbdd\fR is TRUE and the value of \fIbdd2\fR is FALSE. 
+(TRUE > FALSE just as 1 > 0).
+.TP
+\fIsystem\fR \fB>=\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the function will be TRUE for those variable assignments where
+the value of \fIbdd\fR is TRUE the value of \fIbdd2\fR is FALSE.
+In addition to being a "greater than or equal" comparison, this operator
+is also "logical implication", \fIbdd2\fR->\fIbdd\fR.
+.TP
+\fIsystem\fR \fB^\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the result is the EXCLUSIVE OR of the values of the two input
+functions.
+.TP
+\fIsystem\fR \fBnand\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the result is the NAND of the values of the two input functions.
+.TP
+\fIsystem\fR \fBnor\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the result is the NOR of the values of the two input functions.
+.TP
+\fIsystem\fR \fB|\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR
+The value of the result is the logical OR of the values of the two input 
+functions.
+.SH "TERNARY OPERATORS"
+BDD's may also be constructed by applying ternary operations to three
+functions:
+.TP
+\fIsystem\fR \fB&3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be the logical AND of three input BDD's.
+.TP
+\fIsystem\fR \fB^3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The logical EXCLUSIVE OR of three input BDD's. The resulting function is
+true over those variable assignments that make an odd number (1 or 3) of
+the input functions true.
+.TP
+\fIsystem\fR \fB?:\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will have the same value as \fIbdd2\fR on
+those variable assignments that make \fIbdd\fR true, and the same value
+as \fIbdd3\fR on those variable assignments that make \fIbdd\fR false.
+.TP
+\fIsystem\fR \fBborrow\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+This operation is used to implement subtraction in Finite Domain Decision
+Diagram (FDDD) systems. If true==1 and false==0, then the 'borrow'
+operation is true for those input variable assigments that cause the
+calculation of \fIbdd\fR\-\fIbdd2\fR\-\-\fIbdd3\fR to return a value less
+than zero (that is, to borrow from the next column). 
+.TP
+\fIsystem\fR \fBconcur3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be true only for those variable assignments
+for which \fIbdd\fR, \fIbdd2\fR, and \fIbdd3\fR return the same value (either
+all are false or all are true).
+.TP
+\fIsystem\fR \fBdiffer3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be true only for those variable assignments
+for which \fIbdd\fR, \fIbdd2\fR, and \fIbdd3\fR are not all equal.
+.TP
+\fIsystem\fR \fBeven3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be true only for those variable assignments
+for which an even number of \fIbdd\fR, \fIbdd2\fR, and \fIbdd3\fR are true.
+.TP
+\fIsystem\fR \fBmedian\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be the median value of \fIbdd\fR, \fIbdd2\fR, 
+and \fIbdd3\fR. This operation may be used to describe "majority voting".
+If the values of 0 or 1 of the input functions are true, the value of the
+result function will be false. If the values of 2 or 3 of the input functions
+are true, the result will be true.
+.TP
+\fIsystem\fR \fBnand3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be the logical NAND of three input BDD's.
+.TP
+\fIsystem\fR \fBnor3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be the logical NOR of three input BDD's.
+.TP
+\fIsystem\fR \fBoneof3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be true only for those variable assignments
+for which exactly one of \fIbdd\fR, \fIbdd2\fR, and \fIbdd3\fR are true.
+.TP
+\fIsystem\fR \fBtwoof3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be true only for those variable assignments
+for which exactly two of \fIbdd\fR, \fIbdd2\fR, and \fIbdd3\fR are true.
+.TP
+\fIsystem\fR \fB|3\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR \fIbdd3\fR
+The resulting function will be the logical OR of three input BDD's.
+.SH "QUANTIFIED FORMULAS"
+A family of quantification functions exist to remove variables from BDD's by
+quantificaton: that is, return a formula representing the condition where
+a given formula is satisfied for at least one, or for all, values of a set of 
+variables.
+.TP
+\fIsystem\fR \fBexists\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
+The resulting function will represent the condition needed to make the given 
+function true for at least one combination of values for the variables
+whose names appear in 'varList'. The variables in 'varList' will not appear
+in the result.
+.TP
+\fIsystem\fR \fBforall\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
+The resulting function will represent the condition needed to make the given
+function true for all combinations of values of the variables whose names
+appear in 'varList'. The variables in 'varList' will not appear in the result.
+.TP
+\fIsystem\fR \fBexists_\fR\fIbinop\fR \fIresultBdd\fR \fIvarList\fR \fIbdd1\fR \fIbdd2\fR
+This method is a combination of a binary operator and the \fBexists\fR
+quantifier. It first computes the value of 
+the given binary operation applied to \fIbdd1\fR
+and \fIbdd2\fR. It then eliminates the variables in \fIvarList\fR by
+setting \fIresultBdd\fR to a Boolean formula which is true only for free 
+variable combinations that make the value true for at least one combination 
+of values of the variables in \fIvarList\fR.
+.PP
+The evaluation of both the binary operator and the quanitifier is done in the
+same pass.
+.PP
+The binary operator may be any of the eleven operators, \fB!=\fR, \fB&\fR,
+\fB<\fR, \fB<=\fR, \fB==\fR, \fB>\fR, \fB>=\fR, \fB^\fR, \fBnand\fR,
+\fBnor\fR, and \fB|\fR.
+.TP
+\fIsystem\fR \fBforall_\fR\fIbinop\fR \fIresultBdd\fR \fIvarList\fR \fIbdd1\fR \fIbdd2\fR
+This method is a combination of a binary operator and the \fBforall\fR
+quantifier. It first computes the value of 
+the given binary operation applied to \fIbdd1\fR
+and \fIbdd2\fR. It then eliminates the variables in \fIvarList\fR by
+setting \fIresultBdd\fR to a Boolean formula which is true only for free 
+variable combinations that make the value true for every possible combination 
+of values of the variables in \fIvarList\fR.
+.PP
+The evaluation of both the binary operator and the quanitifier is done in the
+same pass.
+.PP
+The binary operator may be any of the eleven operators, \fB!=\fR, \fB&\fR,
+\fB<\fR, \fB<=\fR, \fB==\fR, \fB>\fR, \fB>=\fR, \fB^\fR, \fBnand\fR,
+\fBnor\fR, and \fB|\fR.
+.SH "VARIABLE AND EXPRESSION SUBSTITUTION IN BDDs"
+Three methods are provided that allow BDD's to be rewritten with changes of
+variables or with restrictive assumptions.
+.TP
+\fIsystem\fR \fBcompose\fR \fIresultBdd\fR \fIbdd\fR ?\fIvarName bdd2\fR?...
+This method rewrites the Boolean expression \fIbdd\fR, replacing each of the
+variables given by the \fIvarName\fR arguments with the corresponding
+expression \fIbdd2\fR. Substitution proceeds entirely simultaneously. For
+example, it is legal to interchange two variables in a BDD by writing
+.CS
+$system compose newBdd oldBdd a b b a
+.CE
+.TP
+\fIsystem\fR \fBrestrict\fR \fIresultBdd\fR \fIbdd\fR ?\fIliteral\fR,,,?
+This method is a much simpler (and faster) alternative to \fIcompose\fR
+for the case where all the variables are to be replaced with constants.
+The resulting BDD gets the simplification of \fIbdd\fR. Each of 
+the \fIliteral\fR arguments is either a variable or the negation of a variable.
+.TP
+\fIsystem\fR \fBsimplify\fR \fIresultBdd\fR \fIbdd\fR \fIbdd2\fR 
+This method attempts to find a simpler expression for \fIbdd\fR assuming
+that \fIbdd2\fR is true. The \fIresultBdd\fR will have the same values 
+as \fIbdd\fR in that circumstance. This method is often used to try to simplify
+BDD's in the presence of 'don't care' conditions.
+.SH "EXAMINING BDDs"
+A number of methods are provided to obtain information about BDD's once
+they are constructed.
+.TP
+\fIsystem\fR \fB===\fR \fIbdd\fR \fIbdd2\fR
+Returns 1 if the two BDD's return the same output value for all variable
+assignments and 0 otherwise, running in constant time. Note that this is
+not the same as the \fB==\fR method, which constructs a BDD whose value is
+1 for those variable assignments over which the two input BDD's are equal.
+.TP
+\fIsystem\fR \fBbeadindex\fR \fIbdd\fR
+Returns the ordinal number of the bead making the first decision in the
+given BDD. This function is used chiefly for debugging the BDD library itself.
+.TP
+\fIsystem\fR \fBdump\fR \fIbdd\fr
+Returns a representation of the given BDD as a Tcl list. This method is
+intended only for testing the BDD library.
+.TP
+\fIsystem\fR \fBprofile\fR \fIbdd\fR
+Computes the number of nodes at each level of the given BDD. This function
+returns a list of integers. The nth element of the list is the number of nodes
+at level n (equivalently, testing the value of variable number n).
+.PP
+This function is provided so that the programmer can test whether the order
+of variables chosen to represent a given formula yields a compact representation
+as a BDD, in order to choose among possible variable orderings. (Choice of
+variable order, in some cases, may yield a BDD whose size grows exponentially
+while in others it yields a BDD whose size grows only linearly.)
+.TP
+\fIsystem\fR \fBsatcount\fR \fIbdd\fR
+Returns an integer which is the number of combinations of variables in \fIsystem\fR (whether they appear in the given BDD or not) that yield a true value for the given BDD. This number is expected to grow exponentially with the number of variables, but can be computed in reasonable time.
+.TP
+\fIsystem\fR \fBsatisfiable\fR \fIbdd\fR
+Returns 1 if any combination of variable values satisfies the given BDD,
+that is, makes it true. Returns 0 if the given BDD is always false. This method
+runs in constant time.
+.TP
+\fIsystem\fR \fBsupport\fR \fIbdd\fR
+Returns a list of variable indices corresponding to the variables
+that appear in the given BDD. The indices present in the returned list are
+exactly the indices for which the result of
+.CS
+$system profile $bdd
+.CE
+is nonzero.
+.TP
+\fIsystem\fR \fBsatisfiable\fR \fIbdd\fR
+Returns 1 if the given BDD is a tautology, that is, if it is true for every
+combination of variable values.
+Returns 0 if the given BDD is sometimes false. This method
+runs in constant time.
+.SH "DELETING BDDs"
+.TP
+\fIsystem\fR \fBunset\fR \fIbdd\fR
+Forgets the value of the given BDD and makes its name undefined.
+.SH "ENUMERATING SATISFYING VARIABLE ASSIGNMENTS"
+'\" foreach_sat and bdd::foreach_fullsat
+.SH "FUNCTIONS FOR FDDD SUPPORT"
+'\" load, project, replace
+.SH "MISCELLANEOUS FUNCTIONS"
+.TP
+\fIsystem\fR \fBgc\fR
+Performs garbage collection on the memory representing the given system of
+BDD's. When BDD's are overwritten, their memory is retained for a short 
+while because other BDD's under construction often reconstruct exactly the
+same node structure. This method arranges that all such memory is freed.
+.SH "SEE ALSO"
+.SH "KEYWORDS"
+.SH "REFERENCES"
+.SH "COPYRIGHT"
+Copyright (c) 2014 by Kevin B. Kenny.
+'\" Local Variables:
+'\" mode: nroff
+'\" End:
+'\"
