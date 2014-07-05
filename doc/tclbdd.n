@@ -187,12 +187,11 @@ is the BDD whose value is always true.
 .PP
 A BDD name may be assigned to another BDD, or to its logical complement, by
 the \fB:=\fR and \fB~\fR methods:
-.PP
-.nf
+.TP
 \fIsystem\fR \fB:=\fR \fIresultBdd\fR \fIbdd\fR
+.TP
 \fIsystem\fR \fB~\fR \fIresultBdd\fR \fIbdd\fR
-.fi
-.PP
+.IP
 After these methods execute, \fIresultBdd\fR will designate either the same
 Boolean function as \fIbdd\fR, or its logical negation.
 .SH "BINARY OPERATORS"
@@ -334,7 +333,7 @@ and \fIbdd2\fR. It then eliminates the variables in \fIvarList\fR by
 setting \fIresultBdd\fR to a Boolean formula which is true only for free 
 variable combinations that make the value true for at least one combination 
 of values of the variables in \fIvarList\fR.
-.PP
+.IP
 The evaluation of both the binary operator and the quanitifier is done in the
 same pass.
 .PP
@@ -350,10 +349,10 @@ and \fIbdd2\fR. It then eliminates the variables in \fIvarList\fR by
 setting \fIresultBdd\fR to a Boolean formula which is true only for free 
 variable combinations that make the value true for every possible combination 
 of values of the variables in \fIvarList\fR.
-.PP
+.IP
 The evaluation of both the binary operator and the quanitifier is done in the
 same pass.
-.PP
+.IP
 The binary operator may be any of the eleven operators, \fB!=\fR, \fB&\fR,
 \fB<\fR, \fB<=\fR, \fB==\fR, \fB>\fR, \fB>=\fR, \fB^\fR, \fBnand\fR,
 \fBnor\fR, and \fB|\fR.
@@ -403,7 +402,7 @@ intended only for testing the BDD library.
 Computes the number of nodes at each level of the given BDD. This function
 returns a list of integers. The nth element of the list is the number of nodes
 at level n (equivalently, testing the value of variable number n).
-.PP
+.IP
 This function is provided so that the programmer can test whether the order
 of variables chosen to represent a given formula yields a compact representation
 as a BDD, in order to choose among possible variable orderings. (Choice of
@@ -432,14 +431,101 @@ Returns 1 if the given BDD is a tautology, that is, if it is true for every
 combination of variable values.
 Returns 0 if the given BDD is sometimes false. This method
 runs in constant time.
+.SH "ENUMERATING SATISFYING VARIABLE ASSIGNMENTS"
+The package provides a function for enumerating the variable assignments
+that satisfy the Boolean function represented by a BDD:
+.TP
+\fIsystem\fR \fBforeach_sat\fR \fIvariable\fR \fIbdd\fR \fIscript\fR
+This call iterates over the satisfying assigments for \fIbdd\fR. For each
+assignment, it places a description of the variable values in the 
+Tcl variable \fIvariable\fR and evaluates \fIscript\fR. 
+.IP
+The content of \fIvariable\fR will be a Tcl list of integers in alternating
+pairs. The first of the integers will be the variable number that was passed
+to [\fIsystem\fR \fBnthvar\fR] or [\fIsystem\fR \fBnotnthvar\fR] to define
+the variable. The second will be the value of the variable: 1 if true and
+0 if false.
+.IP
+\fIVariables with "don't care" values are omitted from the list.\fR That
+is, a list such as
+.CS
+0 1 2 0 5 1
+.CE
+means, "any set of variable values such that variable 0 is true, variable 2 
+is false, and variable 5 is true. Any set of values for variables 1, 3 and 4
+is acceptable."
+.IP
+\fBbreak\fR, \fBcontinue\fR and \fBreturn\fR commands appearing within the
+script have their natural meaning of terminating the loop prematurely,
+advancing prematurely to the next value, and returning from the calling 
+procedure.
+.IP
+For callers that require complete variable enumeration, rather than the
+abbreviated form provided by the \fBforeach_sat\fR method, the library
+provides a call to expand a term from \fBforeach_sat\fR:
+.TP
+\fBbdd::foreach_fullsat\fR \fIvariable varList term script\fR
+This call expands the term \fIterm\fR, making sure that assignments are
+present for all the variables in \fIvarList\fR. It places the list of values,
+in the order in which the variable numbers appear in \fIvarList\fR, into
+\fIvariable\fR, and evaluates \fIscript\fR for each combination.
+.IP
+All the variables present in \fIterm\fR must appear in \fIvarList\fR.
+.IP
+\fBbreak\fR, \fBcontinue\fR and \fIreturn\fR operations that appear in
+\fIscript\fR have their natural meaning. In addition, because 
+\fBbdd::foreach_fullsat\fR so often appears nested directly 
+within [\fIsystem\fR \fBforeach_sat\fR], the special call:
+.CS
+return -level 0 -code 6
+.CE
+executed within \fIscript\fR has the effect, not only of breaking the
+loop requested by \fBbdd::foreach_fullsat\fR but also of making
+\fBbdd::foreach_fullsat\fR have the effect of performing a \fBbreak\fR
+and terminating the execution of the enclosing loop as well.
 .SH "DELETING BDDs"
 .TP
 \fIsystem\fR \fBunset\fR \fIbdd\fR
 Forgets the value of the given BDD and makes its name undefined.
-.SH "ENUMERATING SATISFYING VARIABLE ASSIGNMENTS"
-'\" foreach_sat and bdd::foreach_fullsat
 .SH "FUNCTIONS FOR FDDD SUPPORT"
-'\" load, project, replace
+One of the uses of the BDD package is to support an implementation of
+Finite Domain Decision Diagrams (FDDD's). A few service functions are
+provided for convenience to FDDD support and to aid in the management of
+bulk data.
+.TP
+\fIsystem\fR \fBload\fR \fIbdd\fR \fIdescriptionList\fR \fIvalue\fR ?\fIvalue\fR...?
+This call processes one set of finite-domain values into Boolean variable
+assignments and OR's them into the given \fIbdd\fR. The \fIdescriptionList\fR
+is a list containing a multiple of three elements, all of which are integers,
+describing how the bits in the finite domain values are to be mapped to Boolean
+variable assignments. For each triple in the list, the first element is the
+number of a variable in the BDD (as created with \fBnthvar\fR or 
+\fBnotnthvar\fR). The second element is the index within the \fIvalue\fR
+parameters (0 representing the first of the parameters) of the source
+of the corresponding bit, and the third element is the bit position (0 being
+the least significant bit) of the bit within the specified \fIvalue\fR.
+.IP
+The variables in \fIdescriptionList\fR must appear in increasing order
+by variable number. The corresponding bit positions in the \fIvalue\fR
+parameters may be specified in any order.
+No \fIvalue\fR may be greater than the maximum value of a \fBTcl_WideInt\fR.
+.IP
+It is expected that the \fBload\fR method may be useful to other code that
+wishes to express Boolean functions by enumerating rows of their truth tables
+or in "sum of products" form.
+.TP
+\fIsystem\fR \fBproject\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
+This is a convenience method equivalent to [\fIsystem\fR \fBforall\fR],
+except that the \fIvarList\fR argument contains a list of variable numbers,
+rather than of variable names.
+.TP
+\fIsystem\fR \fBreplace\fR \fIresultBdd\fR \fIvarsToReplace\fR \fIreplacementVars\fR \fIbdd\fR
+This is a convenience method equivalent to [\fIsystem\fR \fBcompose\fR]. In
+this method, the \fIvarsToReplace\fR parameter is a list of variable
+numbers to substitute, and \fIreplacementVars\fI is a list of the same length,
+containing variable numbers that are to replace the variables
+\fIvarsToReplace\fR. This method is used to rewrite a BDD, giving the same
+expression over a different variable set.
 .SH "MISCELLANEOUS FUNCTIONS"
 .TP
 \fIsystem\fR \fBgc\fR
@@ -448,8 +534,24 @@ BDD's. When BDD's are overwritten, their memory is retained for a short
 while because other BDD's under construction often reconstruct exactly the
 same node structure. This method arranges that all such memory is freed.
 .SH "SEE ALSO"
+Bdd(3), tclfddd(n), datalog(n)
 .SH "KEYWORDS"
+binary decision diagram, BDD, Boolean function, finite domain decision diagram,
+FDDD, deduction, deductive database, logic programming
 .SH "REFERENCES"
+An accessible introduction to Binary Decision diagrams is available as:
+.PP
+Andersen, Henrik Reif. "An introduction to binary decision diagrams." 
+Lecture notes, available online, IT University of Copenhagen (1997).
+.br
+http://aima.eecs.berkeley.edu/~russell/classes/cs289/f04/
+readings/Andersen:1997.pdf 
+.PP
+The original reference to BDD's is:
+.PP
+Bryant, R.E., "Graph-Based Algorithms for Boolean Function Manipulation," 
+\fIIEEE Transactions on Computers,\fR \fBC-35:\fR8 (August, 1986), pp. 677-691. 
+http://dx.doi.org/10.1109/TC.1986.1676819
 .SH "COPYRIGHT"
 Copyright (c) 2014 by Kevin B. Kenny.
 '\" Local Variables:
