@@ -1,0 +1,384 @@
+'\" tclfddd.n --
+'\" 
+'\"     Documentation for the 'tclfddd' package
+'\" 
+'\" Copyright (c) 2014 by Kevin B. Kenny
+'\" 
+'\" See the file "license.terms" for information on usage and redistribution of
+'\" this file, and for a DISCLAIMER OF ALL WARRANTIES.
+'\" .so man.macros
+'\" IGNORE
+.if t .wh -1.3i ^B
+.nr ^l \n(.lg
+.ad b
+'\"	# BS - start boxed text
+'\"	# ^y = starting y location
+'\"	# ^b = 1
+.de BS
+.br
+.mk ^y
+.nr ^b 1u
+.if n .nf
+.if n .ti 0
+.if n \l'\\n(.lu\(ul'
+.if n .fi
+..
+'\"	# BE - end boxed text (draw box now)
+.de BE
+.nf
+.ti 0
+.mk ^t
+.ie n \l'\\n(^lu\(ul'
+.el \{\
+'\"	Draw four-sided box normally, but don't draw top of
+'\"	box if the box started on an earlier page.
+.ie !\\n(^b-1 \{\
+\h'-1.5n'\L'|\\n(^yu-1v'\l'\\n(^lu+3n\(ul'\L'\\n(^tu+1v-\\n(^yu'\l'|0u-1.5n\(ul'
+.\}
+.el \}\
+\h'-1.5n'\L'|\\n(^yu-1v'\h'\\n(^lu+3n'\L'\\n(^tu+1v-\\n(^yu'\l'|0u-1.5n\(ul'
+.\}
+.\}
+.fi
+.br
+.nr ^b 0
+..
+.\"	# CS - begin code excerpt
+.de CS
+.RS
+.nf
+.ta .25i .5i .75i 1i
+..
+.\"	# CE - end code excerpt
+.de CE
+.fi
+.RE
+..
+'\" END IGNORE
+.TH "tclfddd" n 0.1 TclFDDD "Tcl Finitd Domainn Decision Diagram library"
+.BS
+.SH "NAME"
+tclfddd \- Finite Domain Decision Diagram (FDDD) library
+.SH "SYNOPSIS"
+.nf
+package require \fBtclbdd 0.1\fR
+package require \fBtclfddd 0.1\fR
+
+\fBbdd::fddd::database create\fR \fIdbname\fR \fIdomain\fR
+\fBbdd::fddd::database new\fR \fIdomain\fR
+
+\fBbdd::fddd::domain\fR \fIcolName\fR \fIwidth\fR \fIendian\fR
+\fBbdd::fddd::interleave\fR ?\fIdomain\fR...?
+\fBbdd::fddd::concatenate\fR ?\fIdomain\fR...?
+
+\fIdb\fR \fBrelation\fR \fIrelation\fR ?\fIcolName\fR...?
+\fIdb\fR \fBforget_relation\fR ?\fIrelation\fR...?
+
+\fIdb\fR \fBloader\fR \fIrelation\fR
+
+\fIdb\fR \fB===\fR \fIrelation1\fR \fIrelation2\fR
+\fIdb\fR \fBantijoin\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
+\fIdb\fR \fBequate\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
+\fIdb\fR \fBinequality\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
+\fIdb\fR \fBjoin\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
+\fIdb\fR \fBnegate\fR \fIresultRelation\fR \fIrelation1\fR
+\fIdb\fR \fBproject\fR \fIresultRelation\fR \fIrelation1\fR
+\fIdb\fR \fBreplace\fR \fIresultRelation\fR \fIrelation1\fR ?\fIoutColName inColName\fR?...
+\fIdb\fR \fBset\fR \fIresultRelation\fR \fIrelation1\fR
+\fIdb\fR \fBunion\fR \fIresultRelation\fR \fIrelation1\fR
+
+\fIdb\fR \fBcolumns\fR ?\fIrelation\fR?
+\fIdb\fR \fBenumerate\fR \fIdictVar\fR \fIrelation\fR \fIscript\fR
+\fIdb\fR \fBgc\fR
+\fIdb\fR \fBprofile\fR \fIrelation\fR
+
+.fi
+.SH "ARGUMENTS"
+.TP
+\fIdbname\fR
+Name to give a Finite Domain Decision Diagram (FDDD) database.
+.TP
+\fIdomain\fR
+A description of the domain over which a database is to operate. 
+A domain is created as the return value from \fBbdd::fddd::domain\fR,
+\fBbdd::fddd::interleave\fR, or \fIbdd::fddd::concatenate\fR.
+.TP
+\fIcolName1\fR, \fIcolName2/fR, ...
+Name of a column in the database
+.TP
+\fIwidth\fR
+Width of a column's value in bits (1-64).
+.TP
+\fIendian\fR
+Endianness of a column when assigning Boolean variables. The default is
+\fBlittleendian\fR, which says that the least significant bit of a value should
+get the lowest Boolean variable number. An alternative is \fBbigendian\fR,
+in which the most significant bit gets the lowest variable number.
+.TP
+\fIrelation1\fR, \fIrelation2\fR, ...
+Name of a relation in the database.
+.TP
+\fIdictVar\fR
+Name of a variable that will receive a dictionary of values representing
+one row of a relation.
+.TP
+\fIscript\fR
+Tcl script to execute for each row of a relation.
+.BE
+.SH "DESCRIPTION"
+The \fBtclfddd\fR package implements a relational database that is
+suited to keeping large, in-memory collections of facts suitable for
+logic programming. It is capable of handling relations that contain
+exponentially growing numbers of tuples, provided that all the values
+in the columns of the database are small integers, and the patterns that
+the tuples follow are sufficiently regular that a Finite Domain Decision
+Diagram (FDDD) can represent each table compactly.
+.PP
+FDDD's are, in turn, implemented atop Binary Decision Diagrams. Each
+small-integer value in an FDDD turns into a cluster of variables in the
+underlying BDD, one bit per variable. 
+.SH "DESCRIBING THE DATABASE"
+A database is created by constructing a \fBbdd::fddd::database\fR object,
+.TP
+\fBbdd::fddd::database create\fR \fIdbname\fR \fIdomain\fR
+.TP
+\fBbdd::fddd::database new\fR \fIdomain\fR
+The constructor accepts a \fIdomain\fR, which describes all the columns
+in the database and the bit positions they correspond to. Domains are
+constructed by composing the commands \fBdomain\fR, \fBinterleave\fR
+and \fBconcatenate\fR.
+.TP
+\fBbdd::fddd::domain\fR \fIcolName\fR \fIwidth\fR \fIendian\fR
+The \fBdomain\fR command accepts a column name, the width in bits of the
+values that the column can accommodate, and optionally a parameter that
+indicates whether the column values are presented with the most significant
+(\fBbigendian\fR) or least significant (\fBlittleendian\fR) bit first.
+The result of the \fBdomain\fR command is a description of the given column 
+suitable for passing to one of the composition commands \fBinterleave\fR
+and \fBconcatenate\fR, or to the \fBfddd\fR constructor.
+.TP
+\fBbdd::fddd::interleave\fR ?\fIdomain\fR...?  
+The \fBinterleave\fR
+command takes as arguments any number of domains. Any column may
+appear in only one of the \fIdomain\fR arguments. It constructs a new
+domain with a bit order that is obtained by taking one bit at a time
+from each of the domains in rotation. In general, columns that are to
+be joined frequently should have their bits interleaved, because comparing
+interleaved values takes space and time proportional to their length,
+while comparing non-interleaved values takes exponential space and time.
+.IP
+The return value of this command is a description of the new domain.
+.TP
+\fBbdd::fddd::concatenate\fR ?\fIdomain\fR...?
+The \fBconcatenate\fR command takes as arguments any number of domains.
+Any column may appear in only one of the \fIdomain\fR arguments. The
+new domain is constructed by taking the bits of the given domains in order,
+without interleaving them. This ordering is appropriate for columns that
+are infrequently joined, because it keeps them from interfering with comparisons
+on frequently-joined ones.
+.IP
+The return value of this command is a description of the new domain.
+.PP
+\fIExample:\fR The following burst of code will create a database that has
+three columns, 'person1', 'person2' and 'person3', all of which are
+frequently joined. Each column can accept 8-bit values.
+.CS
+namespace path bdd::fddd
+database create db \\
+    [interleave \\
+        [domain person1 8] \\
+        [domain person2 8] \\
+	[domain person3 8]
+.CE
+.PP
+Once the database is created, it's next necessary to define relations.
+.TP
+\fIdb\fR \fBrelation\fR \fIrelation\fR ?\fIcolName\fR...?
+This command defines a relation in the database \fIdb\fR. 
+The relation's name is given by the \fIrelation\fR 
+argument. The domain of the relation is the set of columns identified by
+the \fIcolName\fR arguments. All of the columns must be in the set that
+was given to the \fBfddd\fR constructor when the database was constructed.
+.IP
+Relations are initially empty. Tuples may be added to a relation by the
+\fBload\fR method on the database (see below).
+.TP
+\fIdb\fR \fBforget_relation\fR ?\fIrelation\fR...?
+This method removes the relations whose names are given by the \fIrelation\fR
+arguments from the database \fIdb\fR. All content of the relations, and all
+information about their columns, are lost.
+.PP
+\fIExample:\fR The following block of code defines 
+relations, 'parent','temp1', 'temp2', 'temp3' and 'grandparent' 
+over the columns of \fIdb\fR:
+.CS
+db relation parent person1 person2
+db relation temp1 person1 person3
+db relation temp2 person3 person2
+db relation temp3 person1 person2 person3
+db relation grandparent person1 person2
+.CE
+.SH "CODE-GENERATING METHODS"
+Virtually none of the methods that operate on an FDDD database do so
+directly. Instead, they generate bursts of Tcl code that carry out the
+desired operations when evaluated. This is done because translating the
+FDDD operations to BDD operations is relatively expensive, and the code
+generation methods do it as a "compilation step", so that the actual
+operation can be done repeatedly at "run time" in an inexpensive fashion.
+.TP
+\fIdb\fR \fBloader\fR \fIrelation\fR
+This method on a database \fIdb\fR
+is the fundamental way of getting values into a relation.
+It accepts the name of a relation in the database, and returns
+a Tcl command prefix. The calling script is expected to append
+column values to the given script, in the order in which the columns
+appeared in the [\fIdb\fR \fBrelation\fR] call that constructed
+the relation. The values must be integers that fit in the widths of
+the columns. The return value of the command that loads a tuple at
+run time is the empty string.
+.PP
+\fIExample:\fR The following code defines a loading procedure for
+the \fIparent\fR table, and defines a lookup between personal names and
+numeric values. It then defines that Bob is a parent of Carol, 
+Carol is a parent of Ted, and Ted is a parent of Alice.
+.CS
+set personList {Alice Bob Carol Ted}
+set i 0
+foreach p $personList { dict set personNumber $p $i; incr i }
+proc assertParent {parent child} "
+    variable personNumber
+    [$db loader person] \\
+        [dict get $personList $parent] \\
+        [dict get $personList child]
+"
+assertParent Bob Carol
+assertParent Carol Ted
+assertParent Ted Alice
+.CE
+Many of the code-generating methods evaluate the operations of relational
+algebra.
+.TP
+\fIdb\fR \fBantijoin\fR \fIresultRelation\fR \fIrelation1\fR \fIrelation2\fR
+This method generates and returns a codeburst that computes the \fIantijoin\fR
+of two tables in \fIdb\fR whose names are \fIrelation1\fR and \fIrelation2\fR.
+The result, which is placed in \fIresultRelation\fR, is the set of tuples
+that are present in \fIrelation1\fR but not in \fIrelation2\fR. 
+.IP
+If either of the input relations contains columns that are not present
+in the other, the tuples of the other relation are presumed to contain
+every possible value for the missing columns. Most commonly, \fIrelation2\fR
+will have no excess columns, and will contain a set of values identifying
+rows to be deleted.
+.TP
+\fIdb\fR \fBequate\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
+This method generates and returns a codeburst that sets \fIresultRelation\fR
+so that it contains every possible value for columns other than
+\fIcolName1\fR and \fIcolName2\fR and only equal pairs of values for
+those two columns. For any \fIresultRelation\fR, this set is determined 
+uniquely.
+.IP
+The purpose of this method is to give the calling a script a way to implement
+an equality constraint. Joining the result relation of \fBequate\fR to
+another relation selects only those tuples of the second relation which
+have equal values in the given columns.
+.TP
+\fIdb\fR \fBinequality\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
+This method generates and returns a codeburst that sets \fIresultRelation\fR
+so that it contains every possible value for columns other than
+\fIcolName1\fR and \fIcolName2\fR and all but equal pairs of values for
+those two columns. For any \fIresultRelation\fR, this set is determined 
+uniquely.
+.IP
+The purpose of this method is to give the calling a script a way to implement
+an inequality constraint. Joining the result relation of \fBinequality\fR to
+another relation selects only those tuples of the second relation which
+have different values in the given columns.
+.TP
+\fIdb\fR \fBjoin\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
+This method generates and returns a codeburst that computes the \fIjoin\fR
+of two tables in \fIdb\fR whose names are \fIrelation1\fR and \fIrelation2\fR.
+The result, which is placed in \fIresultRelation\fR, is the set of tuples
+that are present in both \fIrelation1\fR and \fIrelation2\fR. 
+.IP
+If either of the input relations contains columns that are not present
+in the other, the tuples of the other relation are presumed to contain
+every matching value for the missing columns. 
+.TP
+\fIdb\fR \fBnegate\fR \fIresultRelation\fR \fIrelation1\fR
+This method generates and returns
+a codeburst that will set \fIresultRelation\fR to
+all possible combinations of the values of its columns that do not
+appear in \fIrelation1\fR. That is, the result relation will contain a tuple
+if and only if that tuple does not appear in the input relation.
+.TP
+\fIdb\fR \fBproject\fR \fIresultRelation\fR \fIrelation1\fR
+This method generates and returns a codeburst that
+takes the tuples that appear in \fIrelation1\fR, and removes
+from them any columns that do not appear in the \fIresultRelation\fR.
+It then sets \fIresultRelation\fR to that set of tuples. 
+.IP
+It is common to use projection immediately after joining two tables,
+to remove the column that was used for the join.
+.TP
+\fIdb\fR \fBreplace\fR \fIresultRelation\fR \fIrelation1\fR ?\fIoutColName inColName\fR?...
+This method generates and returns a codeburst that
+takes an input relation \fIrelation1\fR in the database \fIdb\fR,
+and for each tuple, constructs a tuple where the first column \fIoutColName\fR
+will take the value of the first input column \fIinColName\fR, 
+the second column \fIoutColName\fR
+will take the value of the second input column \fIinColName\fR, and
+so on. This operation is necessary to perform a \fIself-join\fR, where a
+table is joined to itself by linking the values of two different columns.
+.IP
+See the 'grandfather' table in the example below for how to use renaming to
+perform a self-join.
+.IP
+Replacements are done in parallel: a statement like
+.IP
+.CS
+db replace rel2 rel1 col1 col2 col2 col1
+.CE
+.IP
+is legal, and interchanges the values of 'col1' and 'col2'
+.TP
+\fIdb\fR \fBset\fR \fIresultRelation\fR \fIrelation1\fR
+This method generates and returns a codeburst 
+that replaces in the database \fIdb\fR the tuples
+of \fIresultRelation\fR with those of \fIrelation1\fR, making
+\fIresultRelation\fR a copy of \fIrelation1\fR.
+.TP
+\fIdb\fR \fBunion\fR \fIresultRelation\fR \fIrelation1\fR \fIrelation2\fR
+This method generates and returns a codeburst that will take the union
+of the set of tuples of \fIrelation1\fR in database \fIdb\fR
+and the set of tuples of \fIrelation2\fR in the same database.
+The result is placed in \fIresultRelation\fR.
+.PP
+\fIExample:\fR The following block of code constructs a \fIgrandparent\fR
+relation, whose members are the set of combinations A and C for which there is
+some B such that A is the parent of B and B is the parent of C.
+.CS
+proc findGrandparents {} "
+    [db rename temp1 parent person2 person3]; 
+                  # person1 is a parent of person3
+    [db rename temp2 parent person1 person3];
+                  # person3 is a parent of person2
+    [db join temp3 temp1 temp2]; 
+                  # person1 is a parent of person3, who is
+                  # a parent of person2
+    [db project grandparent temp3];
+                  # get rid of the 'person3' column
+                  # and store the 'grandparent' relation
+"
+findGrandparents
+.CE
+.\" enumerate
+.\" columns, gc, profile
+.SH "SEE ALSO"
+.SH "KEYWORDS"
+.SH "REFERENCES"
+.SH "COPYRIGHT"
+Copyright (c) 2014 by Kevin B. Kenny.
+'\" Local Variables:
+'\" mode: nroff
+'\" End:
+'\"

@@ -100,7 +100,7 @@ proc bdd::fddd::domain {name width {endian littleendian}} {
     return [list [Invert $l] $l]
 }
 
-# bdd::bdd::fddd::interleave --
+# bdd::fddd::interleave --
 #
 #	Interleaves some number of finite domains so that their bit positions
 #	in a BDD alternate.
@@ -620,12 +620,12 @@ oo::class create bdd::fddd::database {
 	return $code
     }
 
-    # Method: forget
+    # Method: forget_relation
     #
     #	Removes relations from the database
     #
     # Usage:
-    #	db forget ?relation...?
+    #	db forget_relation ?relation...?
     #
     # Parameters:
     #	relation... - Names of relations to remove
@@ -823,7 +823,7 @@ oo::class create bdd::fddd::database {
     #	if they are not in the input
     #
     # Usage:
-    #	$db union $dest $source
+    #	$db negate $source1
     #
     # Parameters:
     #	dest    - Name of the relation that will receive the complement

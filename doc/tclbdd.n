@@ -1,4 +1,4 @@
-'\" bdd.n --
+'\" tclbdd.n --
 '\" 
 '\"     Documentation for the 'bdd' package
 '\" 
@@ -42,6 +42,17 @@
 .fi
 .br
 .nr ^b 0
+..
+.\"	# CS - begin code excerpt
+.de CS
+.RS
+.nf
+.ta .25i .5i .75i 1i
+..
+.\"	# CE - end code excerpt
+.de CE
+.fi
+.RE
 ..
 '\" END IGNORE
 .TH "bdd" n 0.1 TclBDD "Tcl Binary Decision Diagram library"
