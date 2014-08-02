@@ -11,7 +11,7 @@ package require tclbdd::fddd
 
 test fddd-1.1 {domain - wrong # args} {*}{
     -body {
-	bdd::fddd::domain
+        bdd::fddd::domain
     }
     -result {wrong # args: *}
     -match glob
@@ -20,96 +20,96 @@ test fddd-1.1 {domain - wrong # args} {*}{
 
 test fddd-1.2 {domain - bigendian default, littleendian available} {*}{
     -body {
-	list \
-	    [bdd::fddd::domain a 3] \
-	    [bdd::fddd::domain b 3 littleendian] \
-	    [bdd::fddd::domain c 3 bigendian]
+        list \
+            [bdd::fddd::domain a 3] \
+            [bdd::fddd::domain b 3 littleendian] \
+            [bdd::fddd::domain c 3 bigendian]
     }
     -result {{{a {0 1 2}} {a 0 a 1 a 2}} {{b {0 1 2}} {b 0 b 1 b 2}} {{c {2 1 0}} {c 2 c 1 c 0}}}
 }
 
 test fddd-1.3 {interleave - duplicated domains} {*}{
     -body {
-	list [catch {
-	    bdd::fddd::interleave \
-		[bdd::fddd::domain a 3] \
-		[bdd::fddd::domain a 3]
-	} result] $result $::errorCode
+        list [catch {
+            bdd::fddd::interleave \
+                [bdd::fddd::domain a 3] \
+                [bdd::fddd::domain a 3]
+        } result] $result $::errorCode
     }
     -result {1 {domain named "a" appears in multiple places} {FDDD DuplicateName a}}
 }
 
 test fddd-1.4 {interleave - two domains} {*}{
     -body {
-	bdd::fddd::interleave \
-	    [bdd::fddd::domain a 3] \
-	    [bdd::fddd::domain b 3]
+        bdd::fddd::interleave \
+            [bdd::fddd::domain a 3] \
+            [bdd::fddd::domain b 3]
     }
     -result {{a {0 2 4} b {1 3 5}} {a 0 b 0 a 1 b 1 a 2 b 2}}
 }
 
 test fddd-1.5 {interleave - three domains} {*}{
     -body {
-	bdd::fddd::interleave \
-	    [bdd::fddd::domain a 3] \
-	    [bdd::fddd::domain b 3 bigendian] \
-	    [bdd::fddd::domain c 3]
+        bdd::fddd::interleave \
+            [bdd::fddd::domain a 3] \
+            [bdd::fddd::domain b 3 bigendian] \
+            [bdd::fddd::domain c 3]
     }
     -result {{a {0 3 6} b {7 4 1} c {2 5 8}} {a 0 b 2 c 0 a 1 b 1 c 1 a 2 b 0 c 2}}
 }
 
 test fddd-1.6 {interleave - domains of unequal lengths} {*}{
     -body {
-	bdd::fddd::interleave \
-	    [bdd::fddd::domain a 4] \
-	    [bdd::fddd::domain b 3 bigendian] \
-	    [bdd::fddd::domain c 2]
+        bdd::fddd::interleave \
+            [bdd::fddd::domain a 4] \
+            [bdd::fddd::domain b 3 bigendian] \
+            [bdd::fddd::domain c 2]
     }
     -result {{a {0 3 6 8} b {7 4 1} c {2 5}} {a 0 b 2 c 0 a 1 b 1 c 1 a 2 b 0 a 3}}
 }
 
 test fddd-1.7 {concatenate - duplicated domains} {*}{
     -body {
-	list [catch {
-	    bdd::fddd::concatenate \
-		[bdd::fddd::domain a 3] \
-		[bdd::fddd::domain a 3]
-	} result] $result $::errorCode
+        list [catch {
+            bdd::fddd::concatenate \
+                [bdd::fddd::domain a 3] \
+                [bdd::fddd::domain a 3]
+        } result] $result $::errorCode
     }
     -result {1 {domain named "a" appears in multiple places} {FDDD DuplicateName a}}
 }
 
 test fddd-1.8 {concatenate - two domains} {*}{
     -body {
-	bdd::fddd::concatenate \
-	    [bdd::fddd::domain a 3] \
-	    [bdd::fddd::domain b 3 bigendian]
+        bdd::fddd::concatenate \
+            [bdd::fddd::domain a 3] \
+            [bdd::fddd::domain b 3 bigendian]
     }
     -result {{a {0 1 2} b {5 4 3}} {a 0 a 1 a 2 b 2 b 1 b 0}}
 }
 
 test fddd-1.9 {concatenate of interleaved} {*}{
     -body {
-	bdd::fddd::concatenate \
-	    [bdd::fddd::interleave \
-		 [bdd::fddd::domain a 3] \
-		 [bdd::fddd::domain b 3]] \
-	    [bdd::fddd::interleave \
-		 [bdd::fddd::domain c 3] \
-		 [bdd::fddd::domain d 3]]
+        bdd::fddd::concatenate \
+            [bdd::fddd::interleave \
+                 [bdd::fddd::domain a 3] \
+                 [bdd::fddd::domain b 3]] \
+            [bdd::fddd::interleave \
+                 [bdd::fddd::domain c 3] \
+                 [bdd::fddd::domain d 3]]
     }
     -result {{a {0 2 4} b {1 3 5} c {6 8 10} d {7 9 11}} {a 0 b 0 a 1 b 1 a 2 b 2 c 0 d 0 c 1 d 1 c 2 d 2}}
 }
 
 test fddd-1.10 {interleave of concatenated} {*}{
     -body {
-	bdd::fddd::interleave \
-	    [bdd::fddd::concatenate \
-		 [bdd::fddd::domain a 3] \
-		 [bdd::fddd::domain b 3]] \
-	    [bdd::fddd::concatenate \
-		 [bdd::fddd::domain c 3] \
-		 [bdd::fddd::domain d 3]]
+        bdd::fddd::interleave \
+            [bdd::fddd::concatenate \
+                 [bdd::fddd::domain a 3] \
+                 [bdd::fddd::domain b 3]] \
+            [bdd::fddd::concatenate \
+                 [bdd::fddd::domain c 3] \
+                 [bdd::fddd::domain d 3]]
     }
     -result {{a {0 2 4} c {1 3 5} b {6 8 10} d {7 9 11}} {a 0 c 0 a 1 c 1 a 2 c 2 b 0 d 0 b 1 d 1 b 2 d 2}}
 }
@@ -117,58 +117,487 @@ test fddd-1.10 {interleave of concatenated} {*}{
 test fddd-2.1 {reader - 1 column} {*}{
     -constraints obsolete
     -setup {
-	bdd::system create sys
-	set layout \
-	    [bdd::fddd::concatenate \
-		 [bdd::fddd::domain a 2] \
-		 [bdd::fddd::domain b 2]]
+        bdd::system create sys
+        set layout \
+            [bdd::fddd::concatenate \
+                 [bdd::fddd::domain a 2] \
+                 [bdd::fddd::domain b 2]]
     }
     -body {
-	interp alias {} rdr {} {*}[bdd::fddd::reader sys x $layout a]
-	rdr 1
-	rdr 2
-	set result {}
-	sys foreach_sat s x {
-	    lappend result $s
-	}
-	sys unset x
-	lappend result [sys gc]
-	set result
+        interp alias {} rdr {} {*}[bdd::fddd::reader sys x $layout a]
+        rdr 1
+        rdr 2
+        set result {}
+        sys foreach_sat s x {
+            lappend result $s
+        }
+        sys unset x
+        lappend result [sys gc]
+        set result
     }
     -cleanup {
-	rename rdr {}
-	sys destroy
+        rename rdr {}
+        sys destroy
     }
     -result {{0 0 1 1} {0 1 1 0} 2}
 }
 
-test fddd-2.2 {reader - 2 columns} {
+test fddd-2.2 {reader - 2 columns} {*}{
     -constraints obsolete
     -setup {
-	bdd::system create sys
-	set layout \
-	    [bdd::fddd::concatenate \
-		 [bdd::fddd::domain a 2 bigendian] \
-		 [bdd::fddd::domain b 2 bigendian]]
+        bdd::system create sys
+        set layout \
+            [bdd::fddd::concatenate \
+                 [bdd::fddd::domain a 2 bigendian] \
+                 [bdd::fddd::domain b 2 bigendian]]
     }
     -body {
-	interp alias {} rdr {} {*}[bdd::fddd::reader sys x $layout a b]
-	rdr 1 2
-	rdr 2 3
-	rdr 3 1
-	set result {}
-	sys foreach_sat s x {
-	    lappend result $s
-	}
-	sys unset x
-	lappend result [sys gc]
-	set result
+        interp alias {} rdr {} {*}[bdd::fddd::reader sys x $layout a b]
+        rdr 1 2
+        rdr 2 3
+        rdr 3 1
+        set result {}
+        sys foreach_sat s x {
+            lappend result $s
+        }
+        sys unset x
+        lappend result [sys gc]
+        set result
     }
     -cleanup {
-	rename rdr {}
-	sys destroy
+        rename rdr {}
+        sys destroy
     }
     -result {{0 0 1 1 2 1 3 0} {0 1 1 0 2 1 3 1} {0 1 1 1 2 0 3 1} 2}
+}
+
+# fddd-3 - database construction
+
+test fddd-3.1 {constructor error} {*}{
+    -body {
+        bdd::fddd::database create db rubbish
+    }
+    -returnCodes error
+    -result {expected a domain layout but found "rubbish"}
+}
+
+test fddd-3.2 {constructor error} {*}{
+    -body {
+        bdd::fddd::database create db \
+            {an excessively long amount of rubbish that gets truncated}
+    }
+    -returnCodes error
+    -result {expected a domain layout but found "an excessively long amount of rubbish th..."}
+}
+
+test fddd-3.3 {malformed list} {*}{
+    -body {
+        bdd::fddd::database create db \{
+    }
+    -returnCodes error
+    -result {unmatched open brace in list}
+}
+
+test fddd-3.4 {actual construction} {*}{
+    -body {
+        bdd::fddd::database create ::db \
+            [bdd::fddd::interleave \
+                 [bdd::fddd::domain parent 8] \
+                 [bdd::fddd::domain child 8]]
+    }
+    -result ::db
+    -cleanup {
+        db destroy
+    }
+}
+
+proc makeDB {} {
+    bdd::fddd::database create ::db\
+        [bdd::fddd::interleave \
+             [bdd::fddd::domain parent 8] \
+             [bdd::fddd::domain child 8] \
+             [bdd::fddd::domain xyz 8]]
+}
+
+# fddd-4 - relation construction
+
+test fddd-4.1 {relation construction - missing column} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db relation isParentOf parent goofball
+        } result] $result $::errorCode
+
+    }
+    -cleanup {db destroy}
+    -result {1 {column "goofball" is not defined in this database} {FDDD ColumnNotDefined goofball}}
+}
+
+test fddd-4.2 {relation construction - successful} {*}{
+    -setup makeDB
+    -body {
+        db relation isParentOf parent child
+        lsort [db columns isParentOf]
+    }
+    -cleanup {db destroy}
+    -result {child parent}
+}
+
+test fddd-4.3 {relation construction - duplicate name} {*}{
+    -setup makeDB
+    -body {
+        db relation isParentOf parent child
+        list [catch {
+            db relation isParentOf parent child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "isParentOf" is already defined in this database} {FDDD RelationAlreadyDefined isParentOf}}
+}
+
+proc makeDB {} {
+    bdd::fddd::database create ::db\
+        [bdd::fddd::interleave \
+             [bdd::fddd::domain parent 8] \
+             [bdd::fddd::domain child 8] \
+             [bdd::fddd::domain xyz 8]]
+    ::db relation isParentOf parent child
+}
+
+test fddd-5.1 {loader - code gen} {*}{
+    -setup makeDB
+    -body {
+        lrange [::db loader isParentOf] 1 3
+    }
+    -cleanup {db destroy}
+    -result {load isParentOf {0 0 0 1 1 0 3 0 1 4 1 1 6 0 2 7 1 2 9 0 3 10 1 3 12 0 4 13 1 4 15 0 5 16 1 5 18 0 6 19 1 6 21 0 7 22 1 7}}
+}
+
+proc makeDB {} {
+    bdd::fddd::database create ::db\
+        [bdd::fddd::interleave \
+             [bdd::fddd::domain parent 3 bigendian] \
+             [bdd::fddd::domain child 3 bigendian] \
+             [bdd::fddd::domain xyz 3 bigendian]]
+    ::db relation isParentOf parent child
+    ::db relation troll parent
+    interp alias {} loadIsParentOf {} {*}[::db loader isParentOf]
+    interp alias {} loadTroll {} {*}[::db loader troll]
+}
+
+test fddd-5.2 {loader - load a relation} {*}{
+    -setup makeDB
+    -body {
+        foreach {p c} {0 0 0 1 1 2 1 3 2 4 2 5 3 6 3 7} {
+            loadIsParentOf $p $c
+        }
+        set r \n
+        ::db enumerate d isParentOf {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -cleanup {db destroy}
+    -result {
+        parent 0 child 0
+        parent 0 child 1
+        parent 1 child 2
+        parent 1 child 3
+        parent 2 child 4
+        parent 2 child 5
+        parent 3 child 6
+        parent 3 child 7
+    }
+}
+
+proc makeDB {} {
+    bdd::fddd::database create ::db \
+        [bdd::fddd::concatenate \
+             [bdd::fddd::domain bit 1] \
+             [bdd::fddd::interleave \
+                  [bdd::fddd::domain parent 3 bigendian] \
+                  [bdd::fddd::domain child 3 bigendian] \
+                  [bdd::fddd::domain xyz 3 bigendian]]]
+    ::db relation isParentOf parent child
+    ::db relation result parent child
+    ::db relation troll parent
+    ::db relation everything bit parent child xyz
+    interp alias {} loadIsParentOf {} {*}[::db loader isParentOf]
+    interp alias {} loadTroll {} {*}[::db loader troll]
+    foreach {p c} {0 0 0 1 1 2 1 3 2 4 2 5 3 6 3 7} {
+        loadIsParentOf $p $c
+    }
+}
+
+# fddd-6 - antijoin
+
+test fddd-6.1 {antijoin - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db antijoin rubbish isParentOf troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-6.2 {antijoin - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db antijoin result rubbish troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-6.3 {antijoin - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db antijoin result isParentOf rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-6.4 {antijoin} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db antijoin result isParentOf troll]
+        set r \n
+        ::db enumerate d result {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        parent 1 child 2
+        parent 1 child 3
+        parent 3 child 6
+        parent 3 child 7
+    }
+    -cleanup {db destroy}
+}
+
+# fddd-7 - columns
+
+test fddd-7.1 {columns} {
+    -setup makeDB
+    -body {
+        lsort [db columns]
+    }
+    -cleanup {db destroy}
+    -result {bit child parent xyz}
+}
+
+test fddd-7.2 {columns - bad relation} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db columns rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-7.3 {columns} {
+    -setup makeDB
+    -body {
+        lsort [db columns isParentOf]
+    }
+    -cleanup {db destroy}
+    -result {child parent}
+}
+
+# fddd-8 - enumerate
+# FIXME - implement this
+
+# fddd-9 - equate
+
+test fddd-9.1 {equate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db equate rubbish bit parent} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-9.2 {equate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db equate everything rubbish parent} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "rubbish" is not defined in this database} {FDDD ColumnNotDefined rubbish}}
+}
+
+test fddd-9.3 {equate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db equate everything bit rubbish} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "rubbish" is not defined in this database} {FDDD ColumnNotDefined rubbish}}
+}
+
+test fddd-9.4 {equate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db equate result bit child} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "result" does not contain column "bit"} {FDDD RelationDoesNotContainColumn result bit}}
+}
+
+test fddd-9.5 {equate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db equate result parent bit} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "result" does not contain column "bit"} {FDDD RelationDoesNotContainColumn result bit}}
+}
+
+test fddd-9.6 {equate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db equate everything parent bit} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {cannot compare domains "parent" and "bit": sizes do not match} {FDDD CompareWrongDomains parent bit}}
+}
+
+test fddd-9.7 {equate} {*}{
+    -setup makeDB
+    -body {
+        eval [db equate result parent child]
+        set r \n
+        ::db enumerate d result {
+            append r {        } $d \n
+        }
+        append r {    }
+        set r
+    }
+    -cleanup {db destroy}
+    -result {
+        parent 0 child 0
+        parent 1 child 1
+        parent 2 child 2
+        parent 3 child 3
+        parent 4 child 4
+        parent 5 child 5
+        parent 6 child 6
+        parent 7 child 7
+    }
+}
+
+# fddd-10 - forget
+
+test fddd-10.1 {forget - do nothing gracefully} {*}{
+    -setup makeDB
+    -body {
+        db forget_relation rubbish
+        db relations
+    }
+    -cleanup {db destroy}
+    -result {everything isParentOf result troll}
+}
+
+test fddd-10.2 {forget - forget things} {*}{
+    -setup makeDB
+    -body {
+        db forget_relation everything troll
+        db relations
+    }
+    -cleanup {db destroy}
+    -result {isParentOf result}
+}
+
+# fddd-11 - inequality
+
+test fddd-11.1 {inequality} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db inequality rubbish bit parent} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-11.2 {inequality} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db inequality everything rubbish parent} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "rubbish" is not defined in this database} {FDDD ColumnNotDefined rubbish}}
+}
+
+test fddd-11.3 {inequality} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db inequality everything bit rubbish} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "rubbish" is not defined in this database} {FDDD ColumnNotDefined rubbish}}
+}
+
+test fddd-11.4 {inequality} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db inequality result bit child} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "result" does not contain column "bit"} {FDDD RelationDoesNotContainColumn result bit}}
+}
+
+test fddd-11.5 {inequality} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db inequality result parent bit} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "result" does not contain column "bit"} {FDDD RelationDoesNotContainColumn result bit}}
+}
+
+test fddd-11.6 {inequality} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db inequality everything parent bit} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {cannot compare domains "parent" and "bit": sizes do not match} {FDDD CompareWrongDomains parent bit}}
+}
+
+test fddd-11.7 {inequality} {*}{
+    -setup makeDB
+    -body {
+        eval [db inequality result parent child]
+        for {set i 0} {$i < 8} {incr i} {
+            for {set j 0} {$j < 8} {incr j} {
+                dict set shouldhave $i:$j {}
+            }
+        }
+        ::db enumerate d result {
+            dict unset shouldhave [dict get $d parent]:[dict get $d child]
+        }
+        dict keys $shouldhave
+    }
+    -cleanup {db destroy}
+    -result {0:0 1:1 2:2 3:3 4:4 5:5 6:6 7:7}
 }
 
 cleanupTests
@@ -177,4 +606,5 @@ return
 # Local Variables:
 # mode: tcl
 # c-basic-offset: 4
+# indent-tabs-mode: nil
 # End:

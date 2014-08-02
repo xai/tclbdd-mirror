@@ -588,15 +588,15 @@ oo::class create bdd::fddd::database {
 	}
 	if {[lsearch -exact $destcolumns $col2] == -1} {
 	    return -code error -errorcode \
-		[list FDDD RelationDoesNotContainColumn $dest $col1] \
-		"relation \"$dest\" does not contain column \"$col1\""
+		[list FDDD RelationDoesNotContainColumn $dest $col2] \
+		"relation \"$dest\" does not contain column \"$col2\""
 	}
 	set vars1 [dict get $m_columns $col1]
 	set vars2 [dict get $m_columns $col2]
 	if {[llength $vars1] != [llength $vars2]} {
 	    return -code error \
-		-errorcode [list FDDD EquateWrongDomains $col1 $col2] \
-		"cannot equate domains \"$col1\" and \"$col2\":\
+		-errorcode [list FDDD CompareWrongDomains $col1 $col2] \
+		"cannot compare domains \"$col1\" and \"$col2\":\
                  sizes do not match"
 	}
 
@@ -704,15 +704,15 @@ oo::class create bdd::fddd::database {
 	}
 	if {[lsearch -exact $destcolumns $col2] == -1} {
 	    return -code error -errorcode \
-		[list FDDD RelationDoesNotContainColumn $dest $col1] \
-		"relation \"$dest\" does not contain column \"$col1\""
+		[list FDDD RelationDoesNotContainColumn $dest $col2] \
+		"relation \"$dest\" does not contain column \"$col2\""
 	}
 	set vars1 [dict get $m_columns $col1]
 	set vars2 [dict get $m_columns $col2]
 	if {[llength $vars1] != [llength $vars2]} {
 	    return -code error \
-		-errorcode [list FDDD EquateWrongDomains $col1 $col2] \
-		"cannot equate domains \"$col1\" and \"$col2\":\
+		-errorcode [list FDDD CompareWrongDomains $col1 $col2] \
+		"cannot compare domains \"$col1\" and \"$col2\":\
                  sizes do not match"
 	}
 
@@ -991,6 +991,20 @@ oo::class create bdd::fddd::database {
 		"relation \"$name\" is not defined in this database"
 	}
 	return
+    }
+
+    # Method: relations
+    #
+    #	Lists the relations in a database
+    #
+    # Usage:
+    #	$db relations
+    #
+    # Results:
+    #	Returns the names of the relations
+
+    method relations {} {
+	return [lsort [dict keys $m_relcolumns]]
     }
 
     # Method: replace
