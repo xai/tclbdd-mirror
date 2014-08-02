@@ -34,6 +34,8 @@ proc truthtable {dump nvars} {
     return $result
 }
 
+# bdd-1 - new and delete of bdd's
+
 test bdd-1.0 {simple create/delete} {
     set s [bdd::system new]
     rename $s {}
@@ -53,6 +55,8 @@ test bdd-1.3 {size not an integer} {*}{
     -returnCodes error
     -result {expected integer but got "garbage"}
 }
+
+# bdd-2 - beadindex
 
 test bdd-2.1 {beadindex wrong # args} {*}{
     -setup {bdd::system create sys}
@@ -85,6 +89,9 @@ test bdd-2.4 {expression not found} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
+# bdd-3 - obsolete
+# bdd-4 - :=
+
 test bdd-4.1 {:= - wrong # args} {*}{
     -setup {bdd::system create sys}
     -body {sys :=}
@@ -109,6 +116,8 @@ test bdd-4.3 {:=} {*}{
     -result 1
 }
 
+# bdd-5 - dump
+
 test bdd-5.1 {dump - wrong # args} {*}{
     -setup {bdd::system create sys}
     -body {sys dump}
@@ -131,6 +140,8 @@ test bdd-5.3 {dump - leaf 1} {*}{
     -cleanup {rename sys {}}
     -result {1 {0 1 1}}
 }
+
+# bdd-6 - nthvar
 
 test bdd-6.1 {nthvar - wrong # args} {
     -setup {bdd::system create sys}
@@ -188,6 +199,8 @@ test bdd-6.5 {nthvar - redundant var (tests duplicate BDD_MakeBead)} {
     -cleanup {rename sys {}}
     -result {2 3 2 {} {} {} 2}
 }
+
+# bdd-7 - notnthvar
 
 test bdd-7.1 {notnthvar - wrong # args} {
     -setup {bdd::system create sys}
@@ -248,6 +261,8 @@ test bdd-7.6 {unset} {*}{
     -cleanup {sys destroy}
     -result {1 {expression named "a" not found} {BDD ExprNotFound a} 2} 
 }
+
+# bdd-8 - negate (~)
 
 test bdd-8.1 {negate - wrong # args} {
     -setup {bdd::system create sys}
@@ -320,6 +335,8 @@ test bdd-8.5 {negate !a} {
     -cleanup {rename sys {}}
     -result {1 {} {} {} 2}
 }
+
+# bdd-9 - binary operators
 
 test bdd-9.1 {binop - wrong # args} {
     -setup {bdd::system create sys}
@@ -593,6 +610,8 @@ test bdd-9.13 {binary | operator} {*}{
     -result {1110 1101 1011 0111 2}
 }
 
+# bdd-10 - demo
+
 test bdd-10.1 {syllogism in the mode of barbara} {
     -setup {
 	bdd::system create sys
@@ -622,6 +641,8 @@ test bdd-10.1 {syllogism in the mode of barbara} {
     -cleanup {rename sys {}}
     -result {0 0 1 10110001 {} 2}
 }
+
+# bdd-11 - test with DeMorgan's Laws
 
 test bdd-11.1 {demorgan} {
     -setup {
@@ -739,6 +760,8 @@ test bdd-11.6 {demorgan} {
 	rename sys {}
    }
 }
+
+# bdd-12 - satcount
 
 test bdd-12.1 {satcount - wrong # args} {
     -setup {bdd::system create sys}
@@ -899,6 +922,8 @@ test bdd-12.11 {satcount - parity tree} {
     }
     -result {257 80000000000000000000000000000000 2}
 }
+
+# bdd-13 - restrict
 
 test bdd-13.1 {restrict - wrong # args} {*}{
     -setup {
@@ -1099,6 +1124,8 @@ test bdd-13.11 {restrict one} {*}{
     -cleanup {rename sys {}}
     -result {1 {} 2}
 }
+
+# bdd-14 - foreach_sat
 
 test bdd-14.1 {foreach_sat - wrong # args} {*}{
     -setup {
@@ -1347,6 +1374,10 @@ test bdd-14.11 {foreach_sat - unusual return} {*}{
     }
     -result {6 testing 2}
 }
+
+# bdd-15 - quantifiers
+#   15.x.1 - exists
+#   15.x.2 - forall
 
 test bdd-15.1.1 {quantifiers - wrong # args} {*}{
     -setup {
@@ -1669,6 +1700,8 @@ test bdd-15.11 {universal quantifier} {*}{
     -cleanup {rename sys {}}
     -result {1 {} 2}
 }
+
+# bdd-16 - ternary operations
 
 foreach operation {
     &3 ^3 ?: borrow concur3 differ3 even3 median nand3 nor3 oneof3 twoof3 |3
@@ -2089,6 +2122,8 @@ test bdd-16.16 {ternary - or} {*}{
     -cleanup {rename sys {}}
 }
 
+# bdd-17 - compose
+
 test bdd-17.1 {compose - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -2402,6 +2437,8 @@ test bdd-17.16 {compose - more complex substitution} {
     -cleanup {rename sys {}}
 }
 
+# bdd-18 - apply and quantify
+
 test bdd-18.1 {appquant - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -2564,6 +2601,8 @@ foreach q {exists forall} {
     }
 }
 
+# bdd-19 - profile
+
 test bdd-19.1 {profile - wrong # args} {*}{
     -setup {bdd::system create sys}
     -body {sys profile}
@@ -2695,6 +2734,8 @@ test bdd-19.6 {profile 4-bit adder} {*}{
     -cleanup {rename sys {}}
     -result {{1 2 3 2 3 4 2 3 4 2 2 2} {} 2}
 }
+
+# bdd-20 - simplify
 
 test bdd-20.1 {simplify - wrong # args} {*}{
     -setup {
@@ -2836,6 +2877,470 @@ test bdd-20.7 {simplify changes variables} {*}{
     -result {1 {} 2}
 }
 
+# bddd-21 - load
+
+test bdd-21.1 {load term - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys load
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-21.2 {load term - bad integer} {*}{
+    -setup {
+	bdd::system create sys
+    } 
+    -body {
+	sys load x {} garbage
+    } 
+    -cleanup {
+	rename sys {}
+    }
+    -result {expected integer but got "garbage"}
+    -returnCodes error
+}
+
+test bdd-21.3 {load term - ill-formed list} {
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys load x \{ 
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {unmatched open brace in list}
+    -returnCodes error
+}
+
+test bdd-21.4 {load term - wrong list size} {
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys load x {1 2}} result] $result $::errorCode
+    }
+    -cleanup {
+	rename sys {}
+    }
+    -result {1 {description list must have a multiple of 3 elements} {BDD DescNotMultipleOf3}}
+}
+
+test bdd-21.5 {load - bad integer - also check bead leak} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {garbage 0 0 1 0 1} 0} result] \
+	    $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test bdd-21.6 {load - bad integer - also check bead leak} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 garbage 0 1 0 1} 0} result] \
+	    $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test bdd-21.7 {load - bad integer - also check bead leak} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 0 garbage 1 0 1} 0} result] \
+	    $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test bdd-21.8 {load - nonincreasing var indices} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {1 0 0 1 0 1} 0} result] \
+	    $result \
+	    $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {variables are not in increasing order} {BDD VarsOutOfOrder} 2}
+}
+
+test bdd-21.9 {load - nonexistent param} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 1 0 1 0 1} 0} result] \
+	    $result \
+	    $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {description refers to a nonexistent parameter} {BDD NonexistentParam} 2}
+}
+
+test bdd-21.10 {load - bad bit index} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list \
+	    [catch {sys load x {0 0 65 1 0 1} 0} result] \
+	    $result \
+	    $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {bad bit index in description} {BDD BadBitIndex} 2}
+}
+
+test bdd-21.11 {load - do nothing gracefully} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys load x {}
+	list [sys beadindex x] [sys unset x] [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {} 2}
+}
+
+test bdd-21.12 {load multiple terms} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	set result {}
+	for {set i 0} {$i < 3} {incr i} {
+	    set j [expr {($i + 1) % 4}]
+	    sys load x {0 0 0 3 1 1 5 1 0 7 0 1} $i $j
+	}
+	sys foreach_sat s x {
+	    lappend result $s
+	}
+	sys unset x
+	lappend result [sys gc]
+	set result
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {{0 0 3 0 5 1 7 0} {0 0 3 1 5 1 7 1} {0 1 3 1 5 0 7 0} 2}
+}
+
+# bdd-22 - project
+
+test bdd-22.1 {project - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys project
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-22.2 {project - can't find expr} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys project x {} garbage} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
+}
+
+test bdd-22.3 {project - malformed list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys project x \{ 1
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {unmatched open brace in list}
+    -returnCodes error
+}
+
+test bdd-22.4 {bad variable number} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys project x garbage 1
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {expected integer but got "garbage"}
+    -returnCodes error
+}
+
+test bdd-22.5 {bad variable number} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys project x {-2 -1} 1} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected nonnegative integer but got "-2"} {BDD NegativeVarIndex -2}}
+}
+
+test bdd-22.6 {variable numbers out of sequence} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys project x {1 0} 1} result] $result $::errorCode
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {variables are not in increasing order} {BDD VarsOutOfOrder}}
+}
+
+test bdd-22.7 {project} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys & expr !e !f; sys & expr expr a
+	sys & term !e  f; sys & term term b; sys | expr expr term
+	sys & term  e !f; sys & term term c; sys | expr expr term
+	sys & term  e  f; sys & term term d; sys | expr expr term
+    }
+    -body {
+	sys | ye a b
+	sys | ye ye c
+	sys | ye ye d
+	sys project ze {4 5} expr
+	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
+	    [sys unset ye ze term expr a b c d e f !e !f] \
+	    [sys gc]
+    }
+    -cleanup {rename sys {}}
+    -result {1 {} 2}
+}
+
+test bdd-22.8 {project with unused variable} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
+	sys nthvar e 4; sys notnthvar !e 4
+	sys nthvar f 5; sys notnthvar !f 5
+	sys & expr !e !f; sys & expr expr a
+	sys & term !e  f; sys & term term b; sys | expr expr term
+	sys & term  e !f; sys & term term c; sys | expr expr term
+	sys & term  e  f; sys & term term d; sys | expr expr term
+    }
+    -body {
+	sys | ye a b
+	sys | ye ye c
+	sys | ye ye d
+	sys project ze {4 5 42} expr
+	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
+	    [sys unset ye ze term expr a b c d e f !e !f] \
+	    [sys gc]
+    }
+    -cleanup {rename sys {}}
+    -result {1 {} 2}
+}
+
+# bdd-23 - replace
+
+test bdd-23.1 {replace - wrong # args} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	sys replace
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {wrong # args: *}
+    -match glob
+    -returnCodes error
+}
+
+test bdd-23.2 {replace - missing expression} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y {} {} garbage} result] $result $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expression named "garbage" not found} {BDD ExprNotFound garbage} 2}
+}
+
+test bdd-23.3 {replace - malformed first list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y \{ {} 0} result] $result [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {unmatched open brace in list} 2}
+}
+
+test bdd-23.4 {replace - malformed second list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y {} \{ 0} result] $result [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {unmatched open brace in list} 2}
+}
+
+test bdd-23.5 {replace - different list lengths} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y {} {1} 0} result] $result $::errorCode \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {variable list and replacement list have different lengths} {BDD WrongListLengths} 2}
+}
+
+test bdd-23.6 {replace - bad integer in first list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y garbage 0 0} result] $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test bdd-23.7 {replace - bad integer in second list} {*}{
+    -setup {
+	bdd::system create sys
+    }
+    -body {
+	list [catch {sys replace y 0 garbage 0} result] $result \
+	    [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {expected integer but got "garbage"} 2}
+}
+
+test bdd-23.8 {replace - nonexistent var to replace} {*}{
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys < c a b
+    }
+    -body {
+	sys replace y 7 0 c
+	list [sys === y c] [sys unset a b c y] [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {} 2}
+}
+
+test bdd-23.9 {replace} {
+    -setup {
+	bdd::system create sys
+	sys nthvar a 0
+	sys nthvar b 1
+	sys < c a b
+	sys > d a b
+    }
+    -body {
+	sys replace y {1 0} {0 1} c
+	list [sys === y d] [sys unset a b c d y] [sys gc]
+    }
+    -cleanup {
+	sys destroy
+    }
+    -result {1 {} 2}
+}
+
+# bdd-24-29 - available
+
+# bdd-30 - ===
+
 test bdd-30.1 {=== - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -2898,6 +3403,8 @@ test bdd-30.4 {=== - bad second arg} {*}{
 	{1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
 }
 
+# bdd-31 - tautology
+
 test bdd-31.1 {tautology - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -2944,6 +3451,8 @@ test bdd-31.3 {tautology} {*}{
     -result {0 1 0 0 {} 2}
 }
 
+# bdd-32 - satisfiable
+
 test bdd-32.1 {satisfiable - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -2989,6 +3498,8 @@ test bdd-32.3 {satisfiable} {*}{
     }
     -result {0 1 1 1 {} 2}
 }
+
+# bdd-33 - support
 
 test bdd-33.1 {support - wrong # args} {*}{
     -setup {
@@ -3045,6 +3556,8 @@ test bdd-33.3 {support} {*}{
     -result {{} {} 0 0 1 1 2 2 {0 1} {0 2} {1 2} {0 1 2} {} 2}
 }
 
+# bdd-34 - beadcount
+
 test bdd-34.1 {beadcount - wrong # args} {*}{
     -setup {
 	bdd::system create sys
@@ -3100,6 +3613,8 @@ test bdd-34.3 {beadcount} {*}{
     }
     -result {0 0 1 1 1 1 1 1 3 3 3 5 {} 2}
 }
+
+# bdd-35 - foreach_fullsat
 
 test bdd-35.1 {foreach_fullsat} {*}{
     -body {
@@ -3192,6 +3707,10 @@ test bdd-35.5 {foreach_fullsat - code 6} {*}{
     -result {3 {} {0 2 2 2}}
 }
 	    
+# bdd-36-39 available
+
+# bdd-40 - demos: eight queens, circuit verification,
+
 test bdd-40.1 {eight queens} {*}{
     -setup {
 	bdd::system create sys

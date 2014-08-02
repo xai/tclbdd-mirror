@@ -9,199 +9,7 @@ namespace import -force ::tcltest::*
 tcltest::loadTestedCommands
 package require tclbdd::fddd
 
-test fddd-1.1 {load term - wrong # args} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys load
-    }
-    -cleanup {
-	rename sys {}
-    }
-    -result {wrong # args: *}
-    -match glob
-    -returnCodes error
-}
-
-test fddd-1.2 {load term - bad integer} {*}{
-    -setup {
-	bdd::system create sys
-    } 
-    -body {
-	sys load x {} garbage
-    } 
-    -cleanup {
-	rename sys {}
-    }
-    -result {expected integer but got "garbage"}
-    -returnCodes error
-}
-
-test fddd-1.3 {load term - ill-formed list} {
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys load x \{ 
-    }
-    -cleanup {
-	rename sys {}
-    }
-    -result {unmatched open brace in list}
-    -returnCodes error
-}
-
-test fddd-1.4 {load term - wrong list size} {
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys load x {1 2}} result] $result $::errorCode
-    }
-    -cleanup {
-	rename sys {}
-    }
-    -result {1 {description list must have a multiple of 3 elements} {BDD DescNotMultipleOf3}}
-}
-
-test fddd-1.5 {load - bad integer - also check bead leak} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list \
-	    [catch {sys load x {garbage 0 0 1 0 1} 0} result] \
-	    $result \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expected integer but got "garbage"} 2}
-}
-
-test fddd-1.6 {load - bad integer - also check bead leak} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list \
-	    [catch {sys load x {0 garbage 0 1 0 1} 0} result] \
-	    $result \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expected integer but got "garbage"} 2}
-}
-
-test fddd-1.7 {load - bad integer - also check bead leak} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list \
-	    [catch {sys load x {0 0 garbage 1 0 1} 0} result] \
-	    $result \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expected integer but got "garbage"} 2}
-}
-
-test fddd-1.8 {load - nonincreasing var indices} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list \
-	    [catch {sys load x {1 0 0 1 0 1} 0} result] \
-	    $result \
-	    $::errorCode \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {variables are not in increasing order} {BDD VarsOutOfOrder} 2}
-}
-
-test fddd-1.9 {load - nonexistent param} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list \
-	    [catch {sys load x {0 1 0 1 0 1} 0} result] \
-	    $result \
-	    $::errorCode \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {description refers to a nonexistent parameter} {BDD NonexistentParam} 2}
-}
-
-test fddd-1.10 {load - bad bit index} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list \
-	    [catch {sys load x {0 0 65 1 0 1} 0} result] \
-	    $result \
-	    $::errorCode \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {bad bit index in description} {BDD BadBitIndex} 2}
-}
-
-test fddd-1.11 {load - do nothing gracefully} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys load x {}
-	list [sys beadindex x] [sys unset x] [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {} 2}
-}
-
-test fddd-1.12 {load multiple terms} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	set result {}
-	for {set i 0} {$i < 3} {incr i} {
-	    set j [expr {($i + 1) % 4}]
-	    sys load x {0 0 0 3 1 1 5 1 0 7 0 1} $i $j
-	}
-	sys foreach_sat s x {
-	    lappend result $s
-	}
-	sys unset x
-	lappend result [sys gc]
-	set result
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {{0 0 3 0 5 1 7 0} {0 0 3 1 5 1 7 1} {0 1 3 1 5 0 7 0} 2}
-}
-
-test fddd-2.1 {domain - wrong # args} {*}{
+test fddd-1.1 {domain - wrong # args} {*}{
     -body {
 	bdd::fddd::domain
     }
@@ -210,7 +18,7 @@ test fddd-2.1 {domain - wrong # args} {*}{
     -returnCodes error
 }
 
-test fddd-2.2 {domain - bigendian default, littleendian available} {*}{
+test fddd-1.2 {domain - bigendian default, littleendian available} {*}{
     -body {
 	list \
 	    [bdd::fddd::domain a 3] \
@@ -220,7 +28,7 @@ test fddd-2.2 {domain - bigendian default, littleendian available} {*}{
     -result {{{a {0 1 2}} {a 0 a 1 a 2}} {{b {0 1 2}} {b 0 b 1 b 2}} {{c {2 1 0}} {c 2 c 1 c 0}}}
 }
 
-test fddd-2.3 {interleave - duplicated domains} {*}{
+test fddd-1.3 {interleave - duplicated domains} {*}{
     -body {
 	list [catch {
 	    bdd::fddd::interleave \
@@ -231,7 +39,7 @@ test fddd-2.3 {interleave - duplicated domains} {*}{
     -result {1 {domain named "a" appears in multiple places} {FDDD DuplicateName a}}
 }
 
-test fddd-2.4 {interleave - two domains} {*}{
+test fddd-1.4 {interleave - two domains} {*}{
     -body {
 	bdd::fddd::interleave \
 	    [bdd::fddd::domain a 3] \
@@ -240,7 +48,7 @@ test fddd-2.4 {interleave - two domains} {*}{
     -result {{a {0 2 4} b {1 3 5}} {a 0 b 0 a 1 b 1 a 2 b 2}}
 }
 
-test fddd-2.5 {interleave - three domains} {*}{
+test fddd-1.5 {interleave - three domains} {*}{
     -body {
 	bdd::fddd::interleave \
 	    [bdd::fddd::domain a 3] \
@@ -250,7 +58,7 @@ test fddd-2.5 {interleave - three domains} {*}{
     -result {{a {0 3 6} b {7 4 1} c {2 5 8}} {a 0 b 2 c 0 a 1 b 1 c 1 a 2 b 0 c 2}}
 }
 
-test fddd-2.6 {interleave - domains of unequal lengths} {*}{
+test fddd-1.6 {interleave - domains of unequal lengths} {*}{
     -body {
 	bdd::fddd::interleave \
 	    [bdd::fddd::domain a 4] \
@@ -260,7 +68,7 @@ test fddd-2.6 {interleave - domains of unequal lengths} {*}{
     -result {{a {0 3 6 8} b {7 4 1} c {2 5}} {a 0 b 2 c 0 a 1 b 1 c 1 a 2 b 0 a 3}}
 }
 
-test fddd-2.7 {concatenate - duplicated domains} {*}{
+test fddd-1.7 {concatenate - duplicated domains} {*}{
     -body {
 	list [catch {
 	    bdd::fddd::concatenate \
@@ -271,7 +79,7 @@ test fddd-2.7 {concatenate - duplicated domains} {*}{
     -result {1 {domain named "a" appears in multiple places} {FDDD DuplicateName a}}
 }
 
-test fddd-2.8 {concatenate - two domains} {*}{
+test fddd-1.8 {concatenate - two domains} {*}{
     -body {
 	bdd::fddd::concatenate \
 	    [bdd::fddd::domain a 3] \
@@ -280,7 +88,7 @@ test fddd-2.8 {concatenate - two domains} {*}{
     -result {{a {0 1 2} b {5 4 3}} {a 0 a 1 a 2 b 2 b 1 b 0}}
 }
 
-test fddd-2.9 {concatenate of interleaved} {*}{
+test fddd-1.9 {concatenate of interleaved} {*}{
     -body {
 	bdd::fddd::concatenate \
 	    [bdd::fddd::interleave \
@@ -293,7 +101,7 @@ test fddd-2.9 {concatenate of interleaved} {*}{
     -result {{a {0 2 4} b {1 3 5} c {6 8 10} d {7 9 11}} {a 0 b 0 a 1 b 1 a 2 b 2 c 0 d 0 c 1 d 1 c 2 d 2}}
 }
 
-test fddd-2.10 {interleave of concatenated} {*}{
+test fddd-1.10 {interleave of concatenated} {*}{
     -body {
 	bdd::fddd::interleave \
 	    [bdd::fddd::concatenate \
@@ -306,7 +114,7 @@ test fddd-2.10 {interleave of concatenated} {*}{
     -result {{a {0 2 4} c {1 3 5} b {6 8 10} d {7 9 11}} {a 0 c 0 a 1 c 1 a 2 c 2 b 0 d 0 b 1 d 1 b 2 d 2}}
 }
 
-test fddd-3.1 {reader - 1 column} {*}{
+test fddd-2.1 {reader - 1 column} {*}{
     -constraints obsolete
     -setup {
 	bdd::system create sys
@@ -334,7 +142,7 @@ test fddd-3.1 {reader - 1 column} {*}{
     -result {{0 0 1 1} {0 1 1 0} 2}
 }
 
-test fddd-3.2 {reader - 2 columns} {
+test fddd-2.2 {reader - 2 columns} {
     -constraints obsolete
     -setup {
 	bdd::system create sys
@@ -362,269 +170,6 @@ test fddd-3.2 {reader - 2 columns} {
     }
     -result {{0 0 1 1 2 1 3 0} {0 1 1 0 2 1 3 1} {0 1 1 1 2 0 3 1} 2}
 }
-
-test fddd-4.1 {project - wrong # args} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys project
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {wrong # args: *}
-    -match glob
-    -returnCodes error
-}
-
-test fddd-4.2 {project - can't find expr} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys project x {} garbage} result] $result $::errorCode
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expression named "garbage" not found} {BDD ExprNotFound garbage}}
-}
-
-test fddd-4.3 {project - malformed list} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys project x \{ 1
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {unmatched open brace in list}
-    -returnCodes error
-}
-
-test fddd-4.4 {bad variable number} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys project x garbage 1
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {expected integer but got "garbage"}
-    -returnCodes error
-}
-
-test fddd-4.5 {bad variable number} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys project x {-2 -1} 1} result] $result $::errorCode
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expected nonnegative integer but got "-2"} {BDD NegativeVarIndex -2}}
-}
-
-test fddd-4.6 {variable numbers out of sequence} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys project x {1 0} 1} result] $result $::errorCode
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {variables are not in increasing order} {BDD VarsOutOfOrder}}
-}
-
-test fddd-4.7 {project} {*}{
-    -setup {
-	bdd::system create sys
-	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
-	sys nthvar e 4; sys notnthvar !e 4
-	sys nthvar f 5; sys notnthvar !f 5
-	sys & expr !e !f; sys & expr expr a
-	sys & term !e  f; sys & term term b; sys | expr expr term
-	sys & term  e !f; sys & term term c; sys | expr expr term
-	sys & term  e  f; sys & term term d; sys | expr expr term
-    }
-    -body {
-	sys | ye a b
-	sys | ye ye c
-	sys | ye ye d
-	sys project ze {4 5} expr
-	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
-	    [sys unset ye ze term expr a b c d e f !e !f] \
-	    [sys gc]
-    }
-    -cleanup {rename sys {}}
-    -result {1 {} 2}
-}
-
-test fddd-4.8 {project with unused variable} {*}{
-    -setup {
-	bdd::system create sys
-	sys nthvar a 0; sys nthvar b 1; sys nthvar c 2; sys nthvar d 3
-	sys nthvar e 4; sys notnthvar !e 4
-	sys nthvar f 5; sys notnthvar !f 5
-	sys & expr !e !f; sys & expr expr a
-	sys & term !e  f; sys & term term b; sys | expr expr term
-	sys & term  e !f; sys & term term c; sys | expr expr term
-	sys & term  e  f; sys & term term d; sys | expr expr term
-    }
-    -body {
-	sys | ye a b
-	sys | ye ye c
-	sys | ye ye d
-	sys project ze {4 5 42} expr
-	list [expr {[sys beadindex ze] == [sys beadindex ye]}] \
-	    [sys unset ye ze term expr a b c d e f !e !f] \
-	    [sys gc]
-    }
-    -cleanup {rename sys {}}
-    -result {1 {} 2}
-}
-
-test fddd-5.1 {replace - wrong # args} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	sys replace
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {wrong # args: *}
-    -match glob
-    -returnCodes error
-}
-
-test fddd-5.2 {replace - missing expression} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys replace y {} {} garbage} result] $result $::errorCode \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expression named "garbage" not found} {BDD ExprNotFound garbage} 2}
-}
-
-test fddd-5.3 {replace - malformed first list} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys replace y \{ {} 0} result] $result [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {unmatched open brace in list} 2}
-}
-
-test fddd-5.4 {replace - malformed second list} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys replace y {} \{ 0} result] $result [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {unmatched open brace in list} 2}
-}
-
-test fddd-5.5 {replace - different list lengths} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys replace y {} {1} 0} result] $result $::errorCode \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {variable list and replacement list have different lengths} {BDD WrongListLengths} 2}
-}
-
-test fddd-5.6 {replace - bad integer in first list} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys replace y garbage 0 0} result] $result \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expected integer but got "garbage"} 2}
-}
-
-test fddd-5.7 {replace - bad integer in second list} {*}{
-    -setup {
-	bdd::system create sys
-    }
-    -body {
-	list [catch {sys replace y 0 garbage 0} result] $result \
-	    [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {expected integer but got "garbage"} 2}
-}
-
-test fddd-5.8 {replace - nonexistent var to replace} {*}{
-    -setup {
-	bdd::system create sys
-	sys nthvar a 0
-	sys nthvar b 1
-	sys < c a b
-    }
-    -body {
-	sys replace y 7 0 c
-	list [sys === y c] [sys unset a b c y] [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {} 2}
-}
-
-test fddd-5.9 {replace} {
-    -setup {
-	bdd::system create sys
-	sys nthvar a 0
-	sys nthvar b 1
-	sys < c a b
-	sys > d a b
-    }
-    -body {
-	sys replace y {1 0} {0 1} c
-	list [sys === y d] [sys unset a b c d y] [sys gc]
-    }
-    -cleanup {
-	sys destroy
-    }
-    -result {1 {} 2}
-}
-
 
 cleanupTests
 return
