@@ -1,3 +1,4 @@
+'\"
 '\" tclfddd.n --
 '\" 
 '\"     Documentation for the 'tclfddd' package
@@ -91,7 +92,6 @@ package require \fBtclfddd 0.1\fR
 \fIdb\fR \fBenumerate\fR \fIdictVar\fR \fIrelation\fR \fIscript\fR
 \fIdb\fR \fBgc\fR
 \fIdb\fR \fBprofile\fR \fIrelation\fR
-
 .fi
 .SH "ARGUMENTS"
 .TP
@@ -371,11 +371,47 @@ proc findGrandparents {} "
 "
 findGrandparents
 .CE
-.\" enumerate
-.\" columns, gc, profile
+.SH "DIRECT METHODS"
+The following methods exist to query the content of the database or perform
+a service against it. They operate directly, rather than returning a block
+of generated code.
+.TP
+\fIdb\fR \fBenumerate\fR \fIdictVar\fR \fIrelation\fR \fIscript\fR
+This command is the basic way that a Tcl script queries a relation.
+The \fIdb\fR is the name of a database.
+The \fIdictVar\fR parameter gives the name of a Tcl variable that will
+hold a dictionary whose keys are column names and whose values are column
+values. The \fIrelation\fR parameter gives the name of a relation, and the
+\fIscript\fR parameter holds a Tcl script. The given script is executed
+once for each tuple in the relation, with the given \fIdictVar\fR set to hold
+the tuple's values. \fBbreak\fR, \fBcontinue\fR, \fBreturn\fR, errors, and
+unusual status returns within \fIscript\fR  all have the same meaning that 
+they do with all loops in Tcl code.
+.TP
+\fIdb\fR \fBgc\fR This command requests that the database named
+\fIdb\fR perform a garbage collection and free any unused memory. It is
+intended primarily for debugging purposes, since the underlying implementation
+gains a performance advantage from keeping the unused objects as a cache.
+.TP
+\fIdb\fR \fBprofile\fR \fIrelation\fR
+This command is intended for performance analysis of the representation
+of relations. It queries \fIdb\fR for the number of Binary Decision Diagram
+nodes required to represent \fIrelation\fR. The result is a list whose elements
+appear in groups of three. The first element in each group is the name of
+a column; the second is the bit position (0 is least significant) within the
+column, and the third is the number of nodes in the BDD that query the given
+bit. A series of numbers that increase exponentially followed by an
+exponential decrease suggests that the variables were declared in an
+inappropriate interleaving.
 .SH "SEE ALSO"
+Bdd(3), tclbdd(n), datalog(n)
 .SH "KEYWORDS"
+finite domain decision diagram, FDDD, binary decision diagram, BDD,
+Boolean function, deduction, deductive database, logic programming.
 .SH "REFERENCES"
+The implementation of the tclfddd package is greatly influenced by
+the BDDBDDB library (http://bddbddb,sourceforge.net/) and the papers
+describing it that are available from the same site.
 .SH "COPYRIGHT"
 Copyright (c) 2014 by Kevin B. Kenny.
 '\" Local Variables:

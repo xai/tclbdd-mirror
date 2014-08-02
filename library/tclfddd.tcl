@@ -856,14 +856,28 @@ oo::class create bdd::fddd::database {
     #	relation - Relation to profile
     #
     # Results:
-    #	Returns a list ordered by variable level giving the number of
-    #	beads at each level
+    #	Returns a list ordered by variable level of elements in groups
+    #	of three:
+    #    - the name of a column
+    #    - the bit index within the column
+    #    - the number of nodes of the relation's BDD that test the given bit.
     #
     # This method executes directly, rather than returning a codeburst.
 
     method profile {relation} {
 	my relationMustExist $relation
-	sys profile $relation
+	set result {}
+	foreach {col bit} $m_variables count [sys profile $relation] {
+	    if {$count eq {}} {
+		set count 0
+	    }
+	    if {[lsearch [dict get $m_relcolumns $relation] $col] >= 0} {
+		lappend result $col $bit $count
+	    } elseif {$count > 0} {
+		lappend result $col? $bit $count
+	    }
+	}
+	return $result
     }
 
     # Method: project
