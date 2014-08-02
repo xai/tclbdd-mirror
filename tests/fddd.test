@@ -600,6 +600,67 @@ test fddd-11.7 {inequality} {*}{
     -result {0:0 1:1 2:2 3:3 4:4 5:5 6:6 7:7}
 }
 
+# fddd-12 - join
+
+test fddd-12.1 {join - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db join rubbish isParentOf troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-12.2 {join - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db join result rubbish troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-12.3 {join - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db join result isParentOf rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-12.4 {join} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db join result isParentOf troll]
+        set r \n
+        ::db enumerate d result {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        parent 0 child 0
+        parent 0 child 1
+        parent 2 child 4
+        parent 2 child 5
+    }
+    -cleanup {db destroy}
+}
+
+
 cleanupTests
 return
 
