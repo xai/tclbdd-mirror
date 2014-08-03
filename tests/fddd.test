@@ -455,7 +455,7 @@ test fddd-8.2 {enumerate - error in script} {*}{
     }
     -cleanup {db destroy}
     -match glob
-    -result {1 testing {testing^    while executing^"error testing"^    ("enumerate" body, line 1)^    invoked from within^"db enumerate d isParentOf {error testing}"}}
+    -result {1 testing {testing^    while executing^"error testing"^    ("enumerate" body line 1)^    invoked from within^"db enumerate d isParentOf {error testing}"}}
 }
 
 test fddd-8.3 {enumerate - return from script} {*}{
