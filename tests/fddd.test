@@ -243,7 +243,7 @@ test fddd-4.2 {relation construction - successful} {*}{
     -result {child parent}
 }
 
-test fddd-4.3 {relation construction - duplicate name} {*}{
+test fddd-4.3 {relation construction - duplicate relation} {*}{
     -setup makeDB
     -body {
         db relation isParentOf parent child
@@ -253,6 +253,17 @@ test fddd-4.3 {relation construction - duplicate name} {*}{
     }
     -cleanup {db destroy}
     -result {1 {relation "isParentOf" is already defined in this database} {FDDD RelationAlreadyDefined isParentOf}}
+}
+
+test fddd-4.4 {relation construction - duplicate column} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db relation isParentOf parent child parent
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "parent" is duplicated in the column list} {FDDD DuplicateColumn parent}}
 }
 
 proc makeDB {} {
@@ -777,7 +788,7 @@ test fddd-15.3 {project} {*}{
     }
     -cleanup {db destroy}
     -result {1 {column(s) missing from source relation: bit xyz} {FDDD ProjectColumnsMissing {bit xyz}}}
-}
+} 
 
 test fddd-15.4 {project} {*}{
     -setup makeDB

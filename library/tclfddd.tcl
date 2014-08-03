@@ -961,9 +961,9 @@ oo::class create bdd::fddd::database {
 	    my columnMustExist $col
 	    if {[dict exists $havecol $col]} {
 		return -code error -errorcode [list FDDD DuplicateColumn $col] \
-		    "column $col is duplicated in the column list"
+		    "column \"$col\" is duplicated in the column list"
 	    }
-	    dict set $havecol $col {}
+	    dict set havecol $col {}
 	}
 	dict set m_relcolumns $name $args
 	{*}[my set $name {}]
