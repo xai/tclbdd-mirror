@@ -920,9 +920,9 @@ oo::class create bdd::fddd::database {
 	}
 	if {[dict size $want] != 0} {
 	    return -code error \
-		-errorcode [list FDDD ProjectColumnMissing \
-				{*}[dict keys $want]]\
-		"columns missing from source relation: [dict keys $want]"
+		-errorcode [list FDDD ProjectColumnsMissing \
+				[dict keys $want]]\
+		"column(s) missing from source relation: [dict keys $want]"
 	}
 	return [list [namespace which sys] project $dest \
 		    [lsort -integer $discards] $source]

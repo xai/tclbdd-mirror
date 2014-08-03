@@ -660,6 +660,139 @@ test fddd-12.4 {join} {*}{
     -cleanup {db destroy}
 }
 
+# fddd-13 - negate
+
+test fddd-13.1 {negate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db negate rubbish isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-13.2 {negate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db negate result rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-13.3 {negate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db negate result troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relations "result" and "troll" have different columns} {FDDD DifferentColumns result troll}}
+}
+
+test fddd-13.4 {negate} {*}{
+    -setup makeDB
+    -body {
+        eval [db negate result isParentOf]
+        set shouldHave {}
+        for {set i 0} {$i < 8} {incr i} {
+            for {set j 0} {$j < 8} {incr j} {
+                dict set shouldhave $i:$j {}
+            }
+        }
+        ::db enumerate d isParentOf {
+            dict unset shouldhave [dict get $d parent]:[dict get $d child]
+        }
+        set doeshave {}
+        ::db enumerate d result {
+            dict set doeshave [dict get $d parent]:[dict get $d child] {}
+        }
+        set result {}
+        if {[lsort [dict keys $doeshave]] ne [lsort [dict keys $shouldhave]]} {
+            set result "Result is [lsort [dict keys $doeshave]]\nshould be [lsort [dict keys $shouldhave]]"
+        }
+        set result
+    }
+    -cleanup {db destroy}
+    -result {}
+}
+
+# fddd-14 - profile
+
+test fddd-14.1 {profile} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db profile rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-14.2 {profile} {*}{
+    -setup makeDB
+    -body {
+        db profile isParentOf
+    }
+    -result {parent 2 1 child 2 1 parent 1 2 child 1 1 parent 0 2 child 0 0}
+}
+
+# fddd-15 - project
+
+test fddd-15.1 {project} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db project rubbish isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-15.2 {project} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db project result rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-15.3 {project} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db project everything isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column(s) missing from source relation: bit xyz} {FDDD ProjectColumnsMissing {bit xyz}}}
+}
+
+test fddd-15.4 {project} {*}{
+    -setup makeDB
+    -body {
+        eval [db project troll isParentOf]
+        set r {}
+        db enumerate d troll {
+            dict set r [dict get $d parent] {}
+        }
+        lsort [dict keys $r]
+    }
+    -cleanup {db destroy}
+    -result {0 1 2 3}
+}
+
+
 
 cleanupTests
 return
