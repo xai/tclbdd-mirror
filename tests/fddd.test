@@ -740,6 +740,7 @@ test fddd-14.2 {profile} {*}{
     -body {
         db profile isParentOf
     }
+    -cleanup {db destroy}
     -result {parent 2 1 child 2 1 parent 1 2 child 1 1 parent 0 2 child 0 0}
 }
 
