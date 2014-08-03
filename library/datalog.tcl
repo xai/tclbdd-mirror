@@ -237,6 +237,9 @@ set bdd::datalog::parser \
 #
 # Parameters:
 #	rule - Rule in the parse tree
+#
+# Results:
+#	Returns the formatted string.
 
 proc bdd::datalog::prettyprint-rule {rule} {
     set s [prettyprint-literal [lindex $rule 0]]
@@ -247,6 +250,21 @@ proc bdd::datalog::prettyprint-rule {rule} {
     }
     return $s
 }
+
+# bdd::datalog::prettyprint-subgoal --
+#
+#	Formats a subgoal for printing.
+#
+# Usage:
+#	bdd::datalog::prettyprint-subgoal $subgoal
+#
+# Parameters:
+#	subgoal - Subgoal (EQUALITY, INEQUALITY, NOT or LITERAL) to be
+#		  printed, expressed as a parse tree.
+#
+# Results:
+#	Returns the formatted string.
+
 proc bdd::datalog::prettyprint-subgoal {subgoal} {
     switch -exact [lindex $subgoal 0] {
 	EQUALITY {
@@ -270,6 +288,21 @@ proc bdd::datalog::prettyprint-subgoal {subgoal} {
     }
     return $s
 }
+
+# bdd::datalog::prettyprint-literal --
+#
+#	Formats a literal for printing.
+#
+# Usage:
+#	bdd::datalog::prettyprint-literal $literal
+#
+# Parameters:
+#	literal - Literal (LITERAL relation ?term...?) to be printed,
+#                 expressed as a parse tree.
+#
+# Results:
+#	Returns the formatted string.
+
 proc bdd::datalog::prettyprint-literal {literal} {
     # FIXME: May need to quote s (and backslashify its content)
     set s [lindex $literal 1]
@@ -284,6 +317,19 @@ proc bdd::datalog::prettyprint-literal {literal} {
     return $s
 }
 
+# bdd::datalog::prettyprint-term --
+#
+#	Formats a term for printing.
+#
+# Usage:
+#	bdd::datalog::prettyprint-term $term
+#
+# Parameters:
+#	term - Term (VARIABLE or CONSTANT) expressed as a parse tree.
+#
+# Results:
+#	Returns the formatted string.
+
 proc bdd::datalog::prettyprint-term {term} {
     switch -exact [lindex $term 0] {
 	VARIABLE {
@@ -297,6 +343,21 @@ proc bdd::datalog::prettyprint-term {term} {
 	}
     }
 }
+
+# bdd::datalog::prettyprint-constant --
+#
+#	Formats a constant for printing.
+#
+# Usage:
+#	bdd::datalog::prettyprint-constant $term
+#
+# Parameters:
+#	term - Term (CONSTANT {INTEGER value} or CONSTANT {TCLVAR name})
+#              to be formatted.
+#
+# Results:
+#	Returns the formatted string.
+
 proc bdd::datalog::prettyprint-constant {constant} {
     switch -exact [lindex $constant 1 0] {
 	INTEGER {
@@ -307,6 +368,20 @@ proc bdd::datalog::prettyprint-constant {constant} {
 	}
     }
 }
+
+# bdd::datalog::prettyprint-variable --
+#
+#	Formats a variable for printing.
+#
+# Usage:
+#	bdd::datalog::prettyprint-variable $term
+#
+# Parameters:
+#	term - Term (VARIABLE name) to be formatted.
+#
+# Results:
+#	Returns the formatted string.
+
 proc bdd::datalog::prettyprint-variable {variable} {
     # FIXME: May need to quote and backslashify
     return [lindex $variable 1]
@@ -319,15 +394,20 @@ proc bdd::datalog::prettyprint-variable {variable} {
 
 oo::class create bdd::datalog::program {
 
+    # 'db' is the name of the database we're compiling against
+    #
     # 'rules' is a list of all the rules in the program, expressed as
     #         parse trees.
+    #
     # 'rulesForPredicate' is a dictionary whose keys are predicate names
-    #         and whose values are lists of rules that assign a value to the
-    #	      given predicate. The lists consist of integer indices into
-    #         the 'rules' list.
-    # 'factsForPredicate' is a dictionary whose keys are predicate names
+    #         and whose values are lists of rule numbers of
+    #	      rules that have the given predicate on the
+    #	      left hand side.
+    #
+    # factsForPredicate' is a dictionary whose keys are predicate names
     #         and whose values are lists of facts that assign a value to the
     #         given predicate
+    #
     # 'outEdgesForPredicate' is a dictionary whose keys are predicate names
     #         and whose values are edges that describe the rules that depend
     #         on the given predicate. Each edge is a tuple:
@@ -338,19 +418,94 @@ oo::class create bdd::datalog::program {
     #             [3] The dependent rule, as a parse tree
     #             [4] The index of the predicate being tracked within the
     #                 subgoals on the right hand side of the dependent rule.
+    #
     # 'query' is a literal giving the query at the end of the program
     #         (if any)
+    #
     # 'executionPlan' gives the eventual order of execution of the facts
     #                 and rules. It is a list of tuples:
     #                     RULE literal subgoal subgoal ...
     #		          FACT literal
     #		          LOOP predicate executionPlan
     #                 possibly having 'QUERY literal' at the end.
+    #
     # 'intcode' is the execution plan translated to an intermediate code
     #           that expresses the work to be done in terms of relational
     #	        algebra.
+    #
+    # The language of the intermediate code is that it is a list of 
+    # instructions, each of which is itself a list comprising an operation
+    # and arguments.  Instructions that are currently recognized include:
+    #
+    # RELATION name ?column...?
+    #	This is a declaration, rather than an instruction. It describes
+    #   that a relation has a given set of columns. As a side effect, the
+    #   relation is cleared (set to the empty set of tuples) before and
+    #   after the program executes.
+    #
+    # ANTIJOIN outputRelation inputRelation1 inputRelation2
+    #	When executed, this instruction sets the output relation to the
+    #   antijoin of the two input relations.
+    #
+    # BEGINLOOP
+    #   Begins a loop. All loops in the generated code are of the "iterate
+    #   until convergence" type: they test at the bottom of the loop and
+    #   run as long as something changes
+    #
+    # ENDLOOP relation1 relation2
+    #   Closes a loop begun with BEGINLOOP. The loop runs until the contents
+    #   of relation1 and relation2 are identical (===).
+    #
+    # EQUALITY relation column1 column2
+    #   Sets the given relation to the set of tuples in which column1 and
+    #   column2 have equal values.
+    #
+    # INEQUALITY relation column1 column2
+    #   Sets the given relation to the set of tuples in which column1 and
+    #   column2 have distinct values.
+    #
+    # JOIN outputRelation inputRelation1 inputRelation2
+    #   Sets the given output relation to the relational join of the two
+    #   input relations.
+    #
+    # LOAD outputRelation ?value...?
+    #   Adds a single tuple to the given output relation. The 'value' arguments
+    #   give the column values in order. Each argument is a two-element list:
+    #	    INTEGER intval
+    #		intval must be an integer at most the same width as the
+    #		corresponding column. Its value will be used as the value
+    #		in the tuple
+    #	    TCLVAR varname
+    #		The Tcl variable named 'varname' will be used for the value
+    #		in the tuple. It must contain an integer at most the same width
+    #		as the corresponding column.
+    #
+    # NEGATE outputRelation inputRelation
+    #	Sets the output relation to the set of all tuples NOT present in the
+    #   input relation.
+    #
+    # PROJECT outputRelation inputRelation
+    #	Initializes the output relation, whose columns must be a subset
+    #	of the columns of the input relation, by projecting away any unused
+    #   columns of the input relation.
+    #
+    # RENAME outputRelation inputRelation ?outputVar inputVar?...
+    #	Sets the output relation's tuples to the tuples of the input relation,
+    #	with each variable named by an 'inputVar' replaced with the
+    #   variable named by the corresponding 'outputVar'.
+    #
+    # SET outputRelation inputRelation
+    #	Copies the given input relation to the given output relation.
+    #
+    # UNION outputRelation inputRelation1 inputRelation2
+    #	Sets the ouput relation to the union of the two given input relations.
+    #
+    # RESULT relation
+    #	Must be the last instruction in the list. Sets up to enumerate the
+    #   tuples in the given relation as the result of a Datalog program.
 
     variable \
+	db \
 	rules \
 	rulesForPredicate \
 	factsForPredicate \
@@ -362,8 +517,12 @@ oo::class create bdd::datalog::program {
     # Constructor -
     #
     #	Creates an empty program.
+    #
+    # Arguments:
+    #	db_ - Name of the database being compiled agains
 
-    constructor {} {
+    constructor {db_} {
+	set db $db_
 	set rules {}
 	set rulesForPredicate {}
 	set factsForPredicate {}
@@ -641,10 +800,10 @@ oo::class create bdd::datalog::program {
 	}
 
 	# Make a loop to iterate over that predicate
+	set loopBody [::bdd::datalog::program new $db]
 	try {
 	    # Take all the other component members and compile
 	    # their rules recursively.
-	    set loopBody [::bdd::datalog::program new]
 	    foreach rule $loops {
 		if {[lindex $rule 0 1] ne $toRemove} {
 		    $loopBody assertRule $rule
@@ -783,29 +942,26 @@ oo::class create bdd::datalog::program {
     #	three-address code.
     #
     # Parameters:
-    #	db - Database on which the plan will be executed. The input and
-    #	     output relations, and all columns appearing in the code,
-    #	     must be defined.
     #	plan - Execution plan, a list of FACT, RULE, LOOP, and QUERY
     #	       subplans, as returned from 'planExecution'
     #
     # Results:
     #	Returns a list of three-address instructions.
 
-    method translateExecutionPlan {db plan} {
+    method translateExecutionPlan {plan} {
 	foreach step $plan {
 	    switch -exact -- [lindex $step 0] {
 		FACT {
-		    my translateFact $db [lindex $step 1]
+		    my translateFact [lindex $step 1]
 		}
 		LOOP {
-		    my translateLoop $db [lindex $step 1] [lindex $step 2]
+		    my translateLoop [lindex $step 1] [lindex $step 2]
 		} 
 		QUERY {
-		    my translateQuery $db [lindex $step 1]
+		    my translateQuery [lindex $step 1]
 		}
 		RULE {
-		    my translateRule $db [lindex $step 1]
+		    my translateRule [lindex $step 1]
 		}
 		default {
 		    error "in translateExecutionPlan: can't happen"
@@ -820,9 +976,6 @@ oo::class create bdd::datalog::program {
     #	Translates a fact in the execution plan to three-address code
     #
     # Parameters:
-    #	db - Database on which the plan will be executed. The input and
-    #	     output relations, and all columns appearing in the code,
-    #	     must be defined.
     #	fact - Literal representing the fact to be translated.
     #	cols - If supplied, list of names of the columns of the
     #	       relation representing $fact's predicate.
@@ -833,7 +986,7 @@ oo::class create bdd::datalog::program {
     # Side effects:
     #	Appends three-addres instructions to 'intcode'
 
-    method translateFact {db fact {cols {}}} {
+    method translateFact {fact {cols {}}} {
 
 	set predicate [lindex $fact 1]
 
@@ -841,7 +994,7 @@ oo::class create bdd::datalog::program {
 	# by the caller.
 
 	if {$cols eq {}} {
-	    db relationMustExist $predicate
+	    $db relationMustExist $predicate
 	    set cols [$db columns $predicate]
 	    if {[llength $cols] != [llength $fact]-2} {
 		set ppfact [bdd::datalog::prettyprint-literal $fact]
@@ -920,9 +1073,6 @@ oo::class create bdd::datalog::program {
     #	iterating to a fixed point.
     #
     # Parameters:
-    #	db - Database on which the plan will be executed. The input and
-    #	     output relations, and all columns appearing in the code,
-    #	     must be defined.
     #   predicate - Predicate to test for a fixed point.
     #	body - Execution plan for the loop body.
     #
@@ -932,9 +1082,9 @@ oo::class create bdd::datalog::program {
     # Side effects:
     #	Appends three-address instructions to 'intcode'
 
-    method translateLoop {db predicate body} {
+    method translateLoop {predicate body} {
 
-	db relationMustExist $predicate
+	$db relationMustExist $predicate
 	set cols [$db columns $predicate]
 	set comparison [my gensym #T]
 
@@ -950,51 +1100,96 @@ oo::class create bdd::datalog::program {
 	lappend intcode [list SET $comparison $predicate]
 
 	# Translate the loop body
-	my translateExecutionPlan $db $body
+	my translateExecutionPlan $body
 
 	# Translate the loop footer.
 	lappend intcode [list ENDLOOP $comparison $predicate $where]
     }
 
-    method translateQuery {db query} {
-	lassign [my translateSubgoal $db $query {} {}] tempRelation tempColumns
+    # Method: translateQuery
+    #
+    #	Generates three-address code to return the result of a Datalog query
+    #
+    # Parameters:
+    #	query - Parse tree of the query
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateQuery {query} {
+	lassign [my translateSubgoal $query {} {}] tempRelation tempColumns
 	lappend intcode [list RESULT $tempRelation $tempColumns]
 	
     }
 
-    method translateRule {db rule} {
+    # Method: translateRule
+    #
+    #	Generates three-address code to evaluate a Datalog rule
+    #
+    # Parameters:
+    #	rule - Parse tree of the rule
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateRule {rule} {
 	set tempRelation {}
 	set tempColumns {}
 	foreach subgoal [lrange $rule 1 end] {
-	    lassign [my translateSubgoal \
-			 $db $subgoal $tempRelation $tempColumns] \
+	    lassign [my translateSubgoal $subgoal $tempRelation $tempColumns] \
 		tempRelation tempColumns
 	}
-	my translateRuleHead $db [lindex $rule 0] $tempRelation $tempColumns
+	my translateRuleHead [lindex $rule 0] $tempRelation $tempColumns
     }
 
-    method translateSubgoal {db subgoal dataSoFar columnsSoFar} {
+    # Method: translateSubgoal
+    #
+    #	Generates three-address code to evaluate a subgoal within a 
+    #   Datalog rule
+    #
+    # Parameters:
+    #	subgoal - Parse tree of the subgoal
+    #	dataSoFar - Name of a relation that holds the result of evaluating
+    #               the subgoals to the left of this subgoal
+    #   columnsSoFar - List of column names present in 'dataSoFar'
+    #
+    # Results:
+    #   Returns a two element list consisting of the name of the relation
+    #   representing the partly-translated rule, and the names of the
+    #   columns in that relation
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateSubgoal {subgoal dataSoFar columnsSoFar} {
+
+	# Dispatch according to the type of the subgoal
 	switch -exact [lindex $subgoal 0] {
 	    NOT {
 		lassign \
-		    [my translateLiteral $db \
+		    [my translateLiteral \
 			 [lindex $subgoal 1] $dataSoFar $columnsSoFar] \
 		    subgoalRelation subgoalColumns
-		tailcall my translateSubgoalEnd $db ANTIJOIN \
+		tailcall my translateSubgoalEnd ANTIJOIN \
 		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
 	    }
 	    EQUALITY -
 	    INEQUALITY {
-		tailcall my translateEquality $db [lindex $subgoal 0] \
+		tailcall my translateEquality [lindex $subgoal 0] \
 		    [lindex $subgoal 1] [lindex $subgoal 2] \
 		    $dataSoFar $columnsSoFar
 	    }
 	    LITERAL {
 		lassign \
-		    [my translateLiteral \
-			 $db $subgoal $dataSoFar $columnsSoFar] \
+		    [my translateLiteral $subgoal $dataSoFar $columnsSoFar] \
 		    subgoalRelation subgoalColumns
-		tailcall my translateSubgoalEnd $db JOIN \
+		tailcall my translateSubgoalEnd JOIN \
 		    $dataSoFar $columnsSoFar $subgoalRelation $subgoalColumns
 	    }
 	    default {
@@ -1003,16 +1198,41 @@ oo::class create bdd::datalog::program {
 	}
     }
 
-    method translateEquality {db operation var1 var2 dataSoFar columnsSoFar} {
+    # Method: translateEquality
+    #
+    #	Generates three-address code to evaluate a subgoal of the
+    #   form 'a==b' or 'a!=b' within a Datalog rule
+    #
+    # Parameters:
+    #	operation - EQUALITY or INEQUALITY depending on the operator encountered
+    #   var1 - {VARIABLE name}, where 'name' is the left hand variable name
+    #   var2 - {VARIABLE name}, where 'name' is the right hand variable name
+    #	dataSoFar - Name of a relation that holds the result of evaluating
+    #               the subgoals to the left of this subgoal
+    #   columnsSoFar - List of column names present in 'dataSoFar'
+    #
+    # Results:
+    #   Returns a two element list consisting of the name of the relation
+    #   representing the partly-translated rule, and the names of the
+    #   columns in that relation
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateEquality {operation var1 var2 dataSoFar columnsSoFar} {
 	set col1 [lindex $var1 1]
 	set col2 [lindex $var2 1]
 	set equality [my gensym #T]
 	lappend intcode \
 	    [list RELATION $equality [list $col1 $col2]] \
 	    [list $operation $equality $col1 $col2]
+	
+	# If there are no earlier subgoals, just create and return the equality
 	if {$columnsSoFar eq {}} {
 	    return [list $equality [list $col1 $col2]]
 	} else {
+
+	    # There are earlier subgoals. Join the equality relation with them.
 	    set joined [my gensym #T]
 	    lappend columnsSoFar $col1 $col2
 	    set columnsSoFar [lsort -dictionary -unique $columnsSoFar]
@@ -1023,16 +1243,43 @@ oo::class create bdd::datalog::program {
 	}
     }
 
-    method translateLiteral {db literal dataSoFar columnsSoFar} {
+    # Method: translateLiteral
+    #
+    #	Generates three-address code to evaluate a literal subgoal of a
+    #   Datalog rule
+    #
+    # Parameters:
+    #   literal - Parse tree of the literal
+    #	dataSoFar - Name of a relation that holds the result of evaluating
+    #               the subgoals to the left of this subgoal
+    #   columnsSoFar - List of column names present in 'dataSoFar'
+    #
+    # Results:
+    #   Returns a two element list consisting of the name of the relation
+    #   representing the partly-translated rule, and the names of the
+    #   columns in that relation
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateLiteral {literal dataSoFar columnsSoFar} {
+
+	# What relation/predicate does the literal refer to?
 	set predicate [lindex $literal 1]
-	db relationMustExist $predicate
-	set cols [db columns $predicate]
+	$db relationMustExist $predicate
+	set cols [$db columns $predicate]
 	if {[llength $cols] != [llength $literal]-2} {
 	    set pplit [bdd::datalog::prettyprint-literal $literal]
 	    return -code error \
 		-errorCode [list DATALOG wrongColumns $predicate $pplit] \
 		"$predicate has a different number of columns from $pplit"
 	}
+
+	# Make a relation to hold the result of selecting for the tuples
+	# that match the literal. The result of the selection may need
+	# projection (to eliminate 'don't-care' columns) or renaming
+	# (if the domains in the literal don't match the columns in the 
+	# relation).
 	set selector [my gensym #T]
 	set selectLiteral [list LITERAL $selector]
 	set needSelect 0
@@ -1042,14 +1289,26 @@ oo::class create bdd::datalog::program {
 	set renamed [my gensym #T]
 	set renamedFrom {}
 	set renamedTo {}
+
+	# Process the terms
 	foreach term [lrange $literal 2 end] col $cols {
 	    switch -exact -- [lindex $term 0] {
 		CONSTANT {
+
+		    # Constant term - make it a selection condition.
+		    # The result will require at least a SELECT operation
+		    # to choose the tuples, and a projection to get rid
+		    # of the constant value.
 		    lappend selectLiteral $term
 		    set needSelect 1
 		    set needProject 1
 		}
 		VARIABLE {
+
+		    # Variable term. If the variable is '_' (don't care),
+		    # then it will need to be projected away. If the variable
+		    # is other than the domain of the column, it will need
+		    # renaming.
 		    set varName [lindex $term 1]
 		    lappend selectLiteral {VARIABLE _}
 		    if {$varName eq {_}} {
@@ -1068,14 +1327,17 @@ oo::class create bdd::datalog::program {
 	    }
 	}
 
+	# Generate the selection to bring in any required tuples
 	if {$needSelect} {
 	    lappend intcode [list RELATION $selector $cols]
-	    my translateFact $db $selectLiteral $cols
+	    my translateFact $selectLiteral $cols
 	    lappend intcode [list JOIN $selector $selector $predicate]
 	    set projectSource $selector
 	} else {
 	    set projectSource $predicate
 	}
+
+	# Project away any constants and don't-cares
 	if {$needProject} {
 	    lappend intcode \
 		[list RELATION $projector $projectColumns] \
@@ -1084,6 +1346,8 @@ oo::class create bdd::datalog::program {
 	} else {
 	    set renameSource $projectSource
 	}
+
+	# Rename any columns that need it.
 	if {[llength $renamedFrom] > 0} {
 	    lappend intcode [list RELATION $renamed $renamedColumns]
 	    set renameCommand [list RENAME $renamed $renameSource]
@@ -1098,16 +1362,45 @@ oo::class create bdd::datalog::program {
 	return [list $result $renamedColumns]
     }
 
-    method translateSubgoalEnd {db operation 
+    # Method: translateSubgoalEnd
+    #
+    #	Generates three-address code to finish the evaluation of a literal
+    #   subgoal of a Datalog rule, after code has been generated for all terms.
+    #
+    # Parameters:
+    #   operation - JOIN or ANTIJOIN according to whether the literal is
+    #               negated.
+    #	dataSoFar - Name of a relation that holds the result of evaluating
+    #               the subgoals to the left of this subgoal
+    #   columnsSoFar - List of column names present in 'dataSoFar'
+    #   dataThisOp - Name of a relation that holds the result of evaluating
+    #                the literal
+    #   columnsThisOp - Lisst of column names present in 'dataThisOp'
+    #
+    # Results:
+    #   Returns a two element list consisting of the name of the relation
+    #   representing the partly-translated rule, and the names of the
+    #   columns in that relation
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateSubgoalEnd {operation 
 				dataSoFar columnsSoFar
 				dataThisOp columnsThisOp} {
 	if {$dataSoFar eq {}} {
+
+	    # This is the first literal in the rule. Negate it if necessary,
+	    # and let it be the result
 	    if {$operation eq {ANTIJOIN}} {
 		lappend intcode [list NEGATE $dataThisOp $dataThisOp]
 	    }
 	    set resultRelation $dataThisOp
 	    set resultColumns $columnsThisOp
 	} else {
+
+	    # Join or antijoin the result of the literal to the result of
+	    # the subgoals to its left
 	    set resultColumns $columnsSoFar
 	    lappend resultColumns {*}$columnsThisOp
 	    set resultColumns [lsort -unique -dictionary $resultColumns]
@@ -1119,10 +1412,27 @@ oo::class create bdd::datalog::program {
 	return [list $resultRelation $resultColumns]
     }
 
-    method translateRuleHead {db literal sourceRelation sourceColumns} {
+    # Method: translateRuleHead
+    #
+    #	Generates three-address code to finish the evaluation of a rule
+    #   in a Datalog program, after code has been generated for its right
+    #   hand side..
+    #
+    # Parameters:
+    #   literal - Literal on the left hand side of the rule
+    #	sourceRelation - Relation computed by the right-hand side
+    #   sourceColumns - List of column names in 'sourceRelation'
+    #
+    # Results:
+    #	None.
+    #
+    # Side effects:
+    #	Appends three-address instructions to 'intcode'
+
+    method translateRuleHead {literal sourceRelation sourceColumns} {
 	set predicate [lindex $literal 1]
-	db relationMustExist $predicate
-	set cols [db columns $predicate]
+	$db relationMustExist $predicate
+	set cols [$db columns $predicate]
 	if {[llength $cols] != [llength $literal]-2} {
 	    set pplit [bdd::datalog::prettyprint-literal $literal]
 	    return -code error \
@@ -1209,7 +1519,7 @@ oo::class create bdd::datalog::program {
 	set joinColumns $renamedColumns
 	if {[llength $constantColumns] > 0} {
 	    lappend intcode [list RELATION $constant $constantColumns]
-	    my translateFact $db $constantLiteral $constantColumns
+	    my translateFact $constantLiteral $constantColumns
 	    lappend joinColumns {*}$constantColumns
 	    set joined [my gensym #T]
 	    lappend intcode \
@@ -1239,7 +1549,12 @@ oo::class create bdd::datalog::program {
 	
     }
 
-    method generateCode {db icode args} {
+    # Method: generateCode
+    #
+    #	Generates Tcl code for a Datalog program from the intermediate code 
+    #	lists
+
+    method generateCode {args} {
 
 	set loaders {}
 
@@ -1250,7 +1565,7 @@ oo::class create bdd::datalog::program {
 	set ind0 {    }
 	set ind {    }
 
-	foreach instr $icode {
+	foreach instr $intcode {
 	    switch -exact -- [lindex $instr 0] {
 		RELATION {
 		    $db relation [lindex $instr 1] {*}[lindex $instr 2]
@@ -1349,17 +1664,41 @@ oo::class create bdd::datalog::program {
 
     }
 
+    # Method: getRule
+    #
+    #	Looks up a rule
+    #
+    # Parameters:
+    #	ruleNo - Number of the rule in the order of definition
+    #
+    # Results:
+    #	Returns the parse tree of the rule
+
     method getRule {ruleNo} {
 	return [lindex $rules $ruleNo]
     }
+
+    # Method: getRules
+    #
+    #	Returns a list of all defined rules
+    #
+    # Results:
+    #	Returns a list of parse trees of all the rules, in order of definition
 
     method getRules {} {
 	return $rules
     }
 
-    method getRulesFor {} {
-	return $rulesForPredicate
-    }
+    # Method: getRulesForPredicate
+    #
+    #	Returns a list of the rules for a given predicate
+    #
+    # Parameters;
+    #	predicate - Predicate (or name of the relation) being sought
+    #
+    # Results:
+    #	Returns a list of rule nhmbers for the rules having the given
+    #	predicate on the left hand side.
 
     method getRulesForPredicate {predicate} {
 	if {[dict exists $rulesForPredicate $predicate]} {
@@ -1369,13 +1708,16 @@ oo::class create bdd::datalog::program {
 	}
     }
 
-    method getEdges {} {
-	return $outEdgesForPredicate
-    }
-
-    method getFacts {} {
-	return $factsForPredicate
-    }
+    # Method: getFactsForPredicate
+    #
+    #	Returns a list of the facts for a given predicate
+    #
+    # Parameters:
+    #	predicate - Name of a predicate (relation)
+    #
+    # Results:
+    #	Returns a list of the facts that assert values for the given predicate.
+    #	Each fact is expressed as the parse tree of a literal.
 
     method getFactsForPredicate {predicate} {
 	if {[dict exists $factsForPredicate $predicate]} {
@@ -1535,6 +1877,102 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
     return
 }
 
+# bdd::datalog::compileProgram --
+#
+#	Compiles a Datalog program into Tcl code
+#
+# Usage:
+#	bdd::datalog::compileProgram $db {
+#	    prelude
+#	} {
+#	    programText
+#	} {
+#	    postlude
+#	}
+#
+#	-or-
+#
+#	bdd::datalog::compileProgram $db {
+#	    prelude
+#	} {
+#	    programText
+#	} dictVar {
+#	    actions
+#	} {
+#	    postlude
+#	}
+#
+# Parameters:
+#	db - Name of the BDD database against which the Datalog program
+#	     should operate
+#	prelude - A block of Tcl code that should be evaluate before execution
+#		  of the Datalog program begins.
+#	programText - Text of the program to compile. In the first form,
+#		      the text should comprise only assertions of facts
+#		      and rules. In the second form, the text may contain
+#		      assertions of facts and rules, and must end with
+#		      a single query.
+#	dictVar - The name of a Tcl variable that will receive, for each
+#		  query result, a dictionary whose keys are the names of
+#		  terms in the query and whose values are the values of
+#		  the terms.
+#	actions - A block of Tcl code that will be executed for each query
+#		  result, after filling in 'dictVar' with the values
+#		  produced by the query.
+#	postlude - A block of Tcl code that should execute after the
+#		   Datalog program, including all actions, ends.
+#
+# Results:
+#	Returns a block of Tcl code that when evaluated, executes the Datalog
+#	program.
+#
+# Ordinarily, this procedure is used with 'proc' or 'method' to define
+# a procedure, with a full example looking like the following:
+#
+# # create the database, defining 8-bit domains a, b and c
+# bdd::fddd::database create db \
+#     [bdd::fddd::interleave \
+#         [bdd::fddd::domain a 8] \
+#         [bdd::fddd::domain b 8] \
+#         [bdd::fddd::domain c 8]]]
+#
+# # create the 'parent' relation and load data into it
+# db relation parent a b
+# db relation grandparent a b
+#
+# interp alias {} loadParents {} {*}[db loader parent]
+# loadParent 1 0
+# loadParent 2 0
+# loadParent 3 1
+# loadParent 4 1
+# loadParent 5 2
+# loadParent 6 2
+#
+# # procedure to create the derived relations from 'parent'
+# proc listGrandparents {} [bdd::datalog::compileProgram $db {
+#     # no initialization needed
+# } {
+#     grandparent(a,b) :- parent(a,c), parent(c,b).
+# } {
+#     return
+# }]
+#
+# # Query the database for the grandparents of an item
+# proc grandparent {grandchild} [bdd::datalog::compileProgram $db {
+#     set grandparents {}
+# } {
+#     grandparent(a,$grandchild)?
+# } d {
+#     lappend grandparents [dict get $d a]
+# } {
+#     return $grandparents
+# }
+#
+# # Populate the 'grandparent' relation
+# listGrandparents
+# # What items are the grandparents of item 0?
+# puts [grandparents 0]; # prints a list containing 3, 4, 5, and 6
+
 proc bdd::datalog::compileProgram {db prelude programText args} {
 
     set postlude [lindex $args end]
@@ -1543,24 +1981,24 @@ proc bdd::datalog::compileProgram {db prelude programText args} {
 
     try {
 
-	set program [bdd::datalog::program new]
+	set program [bdd::datalog::program new $db]
 
 	# Do lexical analysis of the program
 	lassign [lex $programText] tokens values
 	
-	# Parse the program
-	set parseTree [$parser parse $tokens $values $program]
+	# Parse the program and feed the parse into $program
+	$parser parse $tokens $values $program
 
 	# Plan the execution
 	set plan [$program planExecution]
 
 	# Translate the execution plan to relational algebra
-	set intcode [$program translateExecutionPlan $db $plan]
+	$program translateExecutionPlan $plan
 
 	# Generate code
 	append result \
 	    $prelude \n \
-	    [$program generateCode $db $intcode {*}[lrange $args 0 end-1]] \n \
+	    [$program generateCode {*}[lrange $args 0 end-1]] \n \
 	    $postlude
 
     } finally {
