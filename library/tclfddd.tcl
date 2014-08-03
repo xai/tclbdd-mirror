@@ -505,9 +505,12 @@ oo::class create bdd::fddd::database {
 		    uplevel 1 $script
 		} on error {message options} {
 		    dict incr options -level 1
-		    dict for {key value} $options { puts "$key = $value" }
-		    regsub \
-			{\("uplevel" body line (\d*?)\).*?\("try" body line 2\)} \
+		    regsub -expanded {
+			\(" uplevel" \s body \s line \s (\d+) \) \n
+			\s* invoked \s from \s within \n
+			"uplevel \s 1 \s \$script" \n
+			\s* \( "try" \s body \s line \s 2 \) \s*
+			$} \
 			[dict get $options -errorinfo] \
 			{("enumerate" body line \1)} \
 			ei
