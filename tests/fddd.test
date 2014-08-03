@@ -333,6 +333,9 @@ proc makeDB {} {
     ::db relation isParentOf parent child
     ::db relation result parent child
     ::db relation troll parent
+    ::db relation temp1 parent xyz
+    ::db relation temp2 xyz child
+    ::db relation temp3 parent xyz child
     ::db relation everything bit parent child xyz
     interp alias {} loadIsParentOf {} {*}[::db loader isParentOf]
     interp alias {} loadTroll {} {*}[::db loader troll]
@@ -433,7 +436,70 @@ test fddd-7.3 {columns} {
 }
 
 # fddd-8 - enumerate
-# FIXME - implement this
+
+test fddd-8.1 {enumerate} {*}{
+    -setup makeDB
+    -body {
+        list [catch {db enumerate d rubbish {}} result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-8.2 {enumerate - error in script} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db enumerate d isParentOf {error testing}
+        } result] $result [regsub -all \n $::errorInfo ^]
+    }
+    -cleanup {db destroy}
+    -match glob
+    -result {1 testing {testing^    while executing^"error testing"^    ("enumerate" body, line 1)^    invoked from within^"db enumerate d isParentOf {error testing}"}}
+}
+
+test fddd-8.3 {enumerate - return from script} {*}{
+    -setup {
+        makeDB
+        proc doit {} {
+            db enumerate d isParentOf {return {testing}}
+        }
+    }
+    -body doit
+    -cleanup {
+        db destroy
+        rename doit {}
+    }
+    -result testing
+}
+
+test fddd-8.4 {enumerate - break out of script} {*}{
+    -setup makeDB
+    -body {
+        set r {}
+        db enumerate d isParentOf {
+            if {[dict get $d child] == 5} break
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        set r
+    }
+    -cleanup {db destroy}
+    -result {0:0 0:1 1:2 1:3 2:4}
+}
+
+test fddd-8.5 {enumerate - continue in script} {*}{
+    -setup makeDB
+    -body {
+        set r {}
+        db enumerate d isParentOf {
+            if {[dict get $d child] == 5} continue
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        set r
+    }
+    -cleanup {db destroy}
+    -result {0:0 0:1 1:2 1:3 2:4 3:6 3:7}
+}
 
 # fddd-9 - equate
 
@@ -524,13 +590,13 @@ test fddd-10.1 {forget - do nothing gracefully} {*}{
         db relations
     }
     -cleanup {db destroy}
-    -result {everything isParentOf result troll}
+    -result {everything isParentOf result temp1 temp2 temp3 troll}
 }
 
 test fddd-10.2 {forget - forget things} {*}{
     -setup makeDB
     -body {
-        db forget_relation everything troll
+        db forget_relation everything temp1 temp2 temp3 troll 
         db relations
     }
     -cleanup {db destroy}
@@ -804,7 +870,307 @@ test fddd-15.4 {project} {*}{
     -result {0 1 2 3}
 }
 
+test fddd-16.1 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace rubbish isParentOf xyz child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
 
+test fddd-16.2 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace temp1 rubbish xyz child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-16.3 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace temp1 isParentOf rubbish child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "rubbish" is not defined in this database} {FDDD ColumnNotDefined rubbish}}
+}
+
+test fddd-16.4 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace temp1 isParentOf xyz rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {column "rubbish" is not defined in this database} {FDDD ColumnNotDefined rubbish}}
+}
+
+test fddd-16.5 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace temp1 isParentOf xyz parent xyz child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {attempt to rename two input columns to "xyz"} {FDDD DuplicateReplaceOutput xyz}}
+}
+
+test fddd-16.6 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace temp1 isParentOf parent child xyz child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {attempt to rename an input column "child" that does not exist or has already been renamed} {FDDD BadReplaceInput child}}
+}
+
+test fddd-16.7 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace result isParentOf xyz parent
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {attempt to rename an input column to "xyz", which does not exist in "result"} {FDDD BadReplaceOutput xyz result}}
+}
+
+test fddd-16.8 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace temp1 isParentOf parent child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {attempt to rename input column "child" to "parent", but another input column already has that name} {FDDD ReplaceOutputOverInput child parent}}
+}
+
+test fddd-16.9 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace everything isParentOf xyz child
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "everything" has columns bit, parent, child, xyz but should have columns parent, xyz} {FDDD WrongColumns everything {bit parent child xyz} {parent xyz}}}
+}
+
+test fddd-16.10 {replace} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db replace everything everything bit child child bit
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {replacement column "bit" is too narrow to hold values from column "child"} {FDDD ReplaceColumnTooNarrow bit child}}
+}
+
+test fddd-16.11 {replace} {*}{
+    -setup makeDB
+    -body {
+        set r {}
+        eval [db replace result isParentOf child parent parent child]
+        db enumerate d result {
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        lsort $r
+    }
+    -cleanup {db destroy}
+    -result {0:0 1:0 2:1 3:1 4:2 5:2 6:3 7:3}
+}
+
+test fddd-17.1 {set} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db set rubbish isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-17.2 {set} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db set result rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-17.3 {set} {*}{
+    -setup makeDB
+    -body {
+        list [catch {
+            db set result troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relations "result" and "troll" have different columns} {FDDD DifferentColumns result troll}}
+}
+
+test fddd-17.4 {set} {*}{
+    -setup makeDB
+    -body {
+        eval [db set result {}]
+        set r {}
+        db enumerate d result {
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        lsort $r
+    }
+    -cleanup {db destroy}
+    -result {}
+}
+
+test fddd-17.5 {set} {*}{
+    -setup makeDB
+    -body {
+        eval [db set result _]
+        set r {}
+        db enumerate d result {
+            dict set r [dict get $d parent]:[dict get $d child] {}
+        }
+        set trouble {}
+        set sep {}
+        for {set i 0} {$i < 8} {incr i} {
+            for {set j 0} {$j < 8} {incr j} {
+                if {![dict exists $r $i:$j]} {
+                    append trouble $sep "missing: $i:$j"
+                    set sep \n
+                } else {
+                    dict unset r $i:$j
+                }
+            }
+        }
+        foreach item [dict keys $r] {
+            append trouble $sep "extra: $item"
+            set sep \n
+        }
+        set trouble
+    }
+    -cleanup {db destroy}
+    -result {}
+}
+
+test fddd-17.6 {set} {*}{
+    -setup makeDB
+    -body {
+        eval [db set result isParentOf]
+        set r {}
+        db enumerate d result {
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        lsort $r
+    }
+    -cleanup {db destroy}
+    -result {0:0 0:1 1:2 1:3 2:4 2:5 3:6 3:7}
+}
+
+test fddd-18.1 {union} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db union rubbish result isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-18.2 {union} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db union result rubbish isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-18.3 {union} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db union result result rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-18.4 {union} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db union result temp1 isParentOf
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relations "result" and "temp1" have different columns} {FDDD DifferentColumns result temp1}}
+}
+
+test fddd-18.5 {union} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db union result result temp2
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relations "result" and "temp2" have different columns} {FDDD DifferentColumns result temp2}}
+}
+
+test fddd-18.6 {union} {
+    -setup makeDB
+    -body {
+        eval [db equate result parent child]
+        eval [db union result result isParentOf]
+        set r {}
+        db enumerate d result {
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        lsort $r
+    }
+    -cleanup {db destroy}
+    -result {0:0 0:1 1:1 1:2 1:3 2:2 2:4 2:5 3:3 3:6 3:7 4:4 5:5 6:6 7:7}
+}
+
+test fddd-30.1 {demo of an actual database join} {
+    -setup makeDB
+    -body {
+        eval [db replace temp1 isParentOf xyz child]
+        eval [db replace temp2 isParentOf xyz parent]
+        eval [db join temp3 temp1 temp2]
+        eval [db project result temp3]
+        set r {}
+        db enumerate d result {
+            lappend r [dict get $d parent]:[dict get $d child]
+        }
+        lsort $r
+    }
+    -cleanup {db destroy}
+    -result {0:0 0:1 0:2 0:3 1:4 1:5 1:6 1:7}
+}
 
 cleanupTests
 return

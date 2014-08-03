@@ -192,34 +192,6 @@ proc bdd::fddd::concatenate {args} {
     return [list [Invert $chain] $chain]
 }
 
-if 0 { # this needs to be a method of the database
-
-# bdd::fddd::support --
-#
-#	Makes a call to the BDD engine to determine the support of a relation
-#	in a finite domain
-#
-# Usage:
-#	bdd::fddd::support sysName relationName layout
-#
-# Parameters:
-#	sysName - Name of the system of BDD's
-#	relationName - Name of the relation to be analyzed
-#	layout - Description of the finite domain
-#
-# Results:
-#	Returns the names of variables on which the relation depends.
-
-proc bdd::fddd::support {sysName relationName layout} {
-    set haveVar {}
-    foreach bit [$sysName support $relationName] {
-	dict set haveVar [lindex $layout 1 [expr {2 * $bit}]] {}
-    }
-    return [dict keys $haveVar]
-}
-
-}
-
 # Class: bdd::fddd::database
 #
 #	Class that represents a database containing relations whose
@@ -533,10 +505,16 @@ oo::class create bdd::fddd::database {
 		    uplevel 1 $script
 		} on error {message options} {
 		    dict incr options -level 1
+		    regsub \
+			{\("uplevel" body line (\d*?)\).*?\("try" body line 2\)} \
+			[dict get $options -errorinfo] \
+			{("enumerate" body, line \1)} \
+			ei
+		    dict set options -errorinfo $ei
 		    return -options $options $message
 		} on return {retval options} {
 		    dict incr options -level 1
-		    return -options $options $message
+		    return -options $options $retval
 		} on break {} {
 		    return -level 0 -code 6
 		} on continue {} {
@@ -1061,13 +1039,13 @@ oo::class create bdd::fddd::database {
 	    if {![dict exists $sourcecols $from]} {
 		return -code error \
 		    -errorcode [list FDDD BadReplaceInput $from] \
-		    "attempt to rename an input column \"from\" that\
+		    "attempt to rename an input column \"$from\" that\
 		     does not exist or has already been renamed"
 	    }
 	    if {![dict exists $destcols $to]} {
 		return -code error \
-		    -errorcode [list FDDD BadReplaceOutput $to] \
-		    "attempt to rename an input column to \"$to\",
+		    -errorcode [list FDDD BadReplaceOutput $to $dest] \
+		    "attempt to rename an input column to \"$to\",\
                      which does not exist in \"$dest\""
 	    }
 	    dict unset sourcecols $from
@@ -1076,9 +1054,9 @@ oo::class create bdd::fddd::database {
 	foreach {to from} $args {
 	    if {[dict exists $sourcecols $to]} {
 		return -code error \
-		    -errorcode [list FDDD ReplaceOutputOverInput $to] \
-		    "attempt to rename an input column to \"$to\",
-                     but another input column already has that name."
+		    -errorcode [list FDDD ReplaceOutputOverInput $from $to] \
+		    "attempt to rename input column \"$from\" to \"$to\",\
+                     but another input column already has that name"
 	    }
 	    dict set sourcecols $to {}
 	}
@@ -1091,8 +1069,8 @@ oo::class create bdd::fddd::database {
 	    set fv [dict get $m_columns $from]
 	    if {[llength $tv] < [llength $fv]} {
 		return -code error \
-		    -errorcode [list FDDD ReplaceColumnTooNarrow $from $to] \
-		    "replacement column \"$to\" is to narrow to hold values\
+		    -errorcode [list FDDD ReplaceColumnTooNarrow $to $from] \
+		    "replacement column \"$to\" is too narrow to hold values\
                      from column \"$from\""
 	    }
 	    lappend fromvars {*}$fv
@@ -1173,29 +1151,6 @@ oo::class create bdd::fddd::database {
 	my ColumnsMustBeSame $dest $source2
 	return [list [namespace which sys] | $dest $source1 $source2]
     }
-
-if 0 {
-    # deprecate this for now.
-    method load {name list} {
-	my relationMustExist $name
-	set nColumns [llength [dict get $m_relcolumns $name]]
-	if {[llength $list] % $nColumns != 0} {
-	    return -code error \
-		-errorcode [list FDDD WrongListLength $nColumns] \
-		"list must have a multiple of $nColumns values"
-	}
-	set reader [my loader $name]
-	set nCM1 [expr {$nColumns - 1}]
-	while {[llength $list] > 0} {
-	    {*}$reader {*}[lrange $list 0 $nCM1]
-	    set list [lreplace ${list}[set list {}] 0 $nCM1]
-	}
-	return
-    }
-}
-
-
-
 }
 
 package provide tclbdd::fddd 0.1
