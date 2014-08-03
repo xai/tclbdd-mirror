@@ -508,7 +508,7 @@ oo::class create bdd::fddd::database {
 		    regsub \
 			{\("uplevel" body line (\d*?)\).*?\("try" body line 2\)} \
 			[dict get $options -errorinfo] \
-			{("enumerate" body, line \1)} \
+			{("enumerate" body line \1)} \
 			ei
 		    dict set options -errorinfo $ei
 		    return -options $options $message
