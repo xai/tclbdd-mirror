@@ -505,6 +505,7 @@ oo::class create bdd::fddd::database {
 		    uplevel 1 $script
 		} on error {message options} {
 		    dict incr options -level 1
+		    dict for {key value} $options { puts "$key = $value" }
 		    regsub \
 			{\("uplevel" body line (\d*?)\).*?\("try" body line 2\)} \
 			[dict get $options -errorinfo] \
