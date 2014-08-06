@@ -1975,9 +1975,23 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
 
 proc bdd::datalog::compileProgram {db prelude programText args} {
 
-    set postlude [lindex $args end]
-
     variable parser
+
+    switch -exact -- [llength $args] {
+	1 {
+	    lassign $args postlude
+	    set dictAndAction {}
+	}
+	3 {
+	    lassign $args dict action postlude
+	    set dictAndAction [list $dict $action]
+	}
+	default {
+	    set methd [lindex [info level 0] 0]
+	    return -code error -errorcode {TCL WRONGARGS} \
+		"wrong # args: should be $methd db prelude programText ?dictVar action? postlude"
+	}
+    }
 
     try {
 
@@ -1998,7 +2012,7 @@ proc bdd::datalog::compileProgram {db prelude programText args} {
 	# Generate code
 	append result \
 	    $prelude \n \
-	    [$program generateCode {*}[lrange $args 0 end-1]] \n \
+	    [$program generateCode {*}$dictAndAction] \n \
 	    $postlude
 
     } finally {
