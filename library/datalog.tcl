@@ -635,6 +635,12 @@ oo::class create bdd::datalog::program {
 	# Add the fact to the list of facts for its predicate
 	set predicate [lindex $literal 1]
 	dict lappend factsForPredicate $predicate $literal
+
+	# Make sure that the predicate exists in the 'outEdgesForPredicate'
+	# dictionary.
+	if {![dict exists $outEdgesForPredicate $predicate]} {
+	    dict set outEdgesForPredicate $predicate {}
+	}
     }
 
     # Method: retractFact
