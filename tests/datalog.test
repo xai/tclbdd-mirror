@@ -264,7 +264,7 @@ test datalog-4.1 {simple recursion} {*}{
 	    set results {}
 	    set p2 $p($who)
 	} {
-	    isAncestorOf(p1,p2) :- isParentOf(p1,p2).
+	    isAncestorOf(p1,p2) :- p1 = p2.
 	    isAncestorOf(p1,p2) :- isParentOf(p1,p3), isAncestorOf(p3,p2).
 	    isAncestorOf(p1, $p2) ?
 	} d {
@@ -278,7 +278,7 @@ test datalog-4.1 {simple recursion} {*}{
 	t George
     }
     -cleanup fini1
-    -result {Charles Elizabeth William}
+    -result {Charles Elizabeth George William}
 }
 
 cleanupTests
