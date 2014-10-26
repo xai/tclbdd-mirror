@@ -5,21 +5,41 @@
 #        tcllib
 
 package ifneeded coroutine::corovar 1.0 {
-    source [file join {@LIBRARY_SRCDIR@} coroutine_corovar.tcl]
+    if {[file exists [file join {@LIBRARY_SRCDIR@} coroutine_corovar.tcl_i]]} {
+	source [file join {@LIBRARY_SRCDIR@} coroutine_corovar.tcl_i]
+    } else {
+	source [file join {@LIBRARY_SRCDIR@} coroutine_corovar.tcl]
+    }	
 }
 package ifneeded coroutine::iterator 1.0 {
-    source [file join {@LIBRARY_SRCDIR@} coroutine_iterator.tcl]
+    if {[file exists [file join {@LIBRARY_SRCDIR@} coroutine_iterator.tcl_i]]} {
+	source [file join {@LIBRARY_SRCDIR@} coroutine_iterator.tcl_i]
+    } else {
+	source [file join {@LIBRARY_SRCDIR@} coroutine_iterator.tcl]
+    }
 }
 
 # Actual packages of tclbdd
 
 package ifneeded tclbdd @PACKAGE_VERSION@ {
-    source [file join {@LIBRARY_SRCDIR@} tclbdd.tcl]
+    if {[file exists [file join {@LIBRARY_SRCDIR@} tclbdd.tcl_i]]} {
+	source [file join {@LIBRARY_SRCDIR@} tclbdd.tcl_i]
+    } else {
+	source [file join {@LIBRARY_SRCDIR@} tclbdd.tcl]
+    }
     load [file join . @PKG_LIB_FILE@] tclbdd
 }
 package ifneeded tclbdd::fddd @PACKAGE_VERSION@ {
-    source [file join {@LIBRARY_SRCDIR@} tclfddd.tcl]
+    if {[file exists [file join {@LIBRARY_SRCDIR@} tclfddd.tcl_i]]} {
+	source [file join {@LIBRARY_SRCDIR@} tclfddd.tcl_i]
+    } else {
+	source [file join {@LIBRARY_SRCDIR@} tclfddd.tcl]
+    }
 }
 package ifneeded tclbdd::datalog @PACKAGE_VERSION@ {
-    source [file join {@LIBRARY_SRCDIR@} datalog.tcl]
+    if {[file exists [file join {@LIBRARY_SRCDIR@} datalog.tcl_i]]} {
+	source [file join {@LIBRARY_SRCDIR@} datalog.tcl_i]
+    } else {
+	source [file join {@LIBRARY_SRCDIR@} datalog.tcl]
+    }
 }
