@@ -10,6 +10,8 @@
 #
 #------------------------------------------------------------------------------
 
+puts "START: [info script]"
+
 package require Tcl 8.6
 package require tclbdd 0.1
 package require tclbdd::fddd 0.1
@@ -2028,6 +2030,21 @@ proc bdd::datalog::compileProgram {db prelude programText args} {
     }
     return $result
 
+}
+
+puts "DEFINE: bdd::datalog::database"
+oo::class create bdd::datalog::database {
+    superclass ::bdd::fddd::database
+
+    constructor {args} {
+	next {*}$args
+    }
+
+    method datalogMethod {name arglist args} {
+	oo::objdefine [self] method $name $arglist \
+	    [bdd::datalog::compileProgram [self] {*}$args]
+    }
+    
 }
 
 package provide tclbdd::datalog 0.1

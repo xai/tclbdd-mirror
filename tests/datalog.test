@@ -9,7 +9,11 @@ namespace import -force ::tcltest::test
 loadTestedCommands
 package require tclbdd::datalog
 
-proc init0 {} {
+namespace eval test {
+    namespace export init0 init1 fini0 fini1
+}
+
+proc test::init0 {} {
     variable people
     variable p
     set i 0
@@ -22,7 +26,7 @@ proc init0 {} {
 	set p($x) $i
 	incr i
     }	
-    bdd::fddd::database create db \
+    bdd::datalog::database create ::db \
 	[bdd::fddd::interleave \
 	     [bdd::fddd::domain p1 5 bigendian] \
 	     [bdd::fddd::domain p2 5 bigendian] \
@@ -31,7 +35,7 @@ proc init0 {} {
     db relation isGrandparentOf p1 p2
 }
 
-proc init1 {} {
+proc test::init1 {} {
     variable p
     init0
     interp alias {} loadIsParentOf {} {*}[db loader isParentOf]
@@ -46,60 +50,60 @@ proc init1 {} {
     rename loadIsParentOf {}
 }
 
-proc fini0 {} {
+proc test::fini0 {} {
     variable people
     variable p
     db destroy
     catch {unset p}
     catch {unset people}
 }
-proc fini1 {} {
+proc test::fini1 {} {
     fini0
 }
 
 test datalog-1.1 {assert a single fact and enumerate over it} {*}{
-    -setup init0
+    -setup test::init0
     -body {
-	proc t {parent child} [bdd::datalog::compileProgram db {
+	db datalogMethod t {parent child} {
 	} {
 	    isParentOf($parent,$child).
 	} {
-	}]
-	t $p(Elizabeth) $p(Charles)
-	t $p(Charles) $p(William)
+	}
+	db t $::test::p(Elizabeth) $::test::p(Charles)
+	db t $::test::p(Charles) $::test::p(William)
 	set result {}
 	db enumerate d isParentOf {
 	    dict lappend result \
-		[lindex $people [dict get $d p1]] \
-		[lindex $people [dict get $d p2]]
+		[lindex $::test::people [dict get $d p1]] \
+		[lindex $::test::people [dict get $d p2]]
 	}
 	list [dict get $result Elizabeth] [dict get $result Charles]
     }
     -result {Charles William}
-    -cleanup fini0
+    -cleanup test::fini0
 }
 
 test datalog-1.2 {assert a fact with a free var and enumerate over it} {*}{
-    -setup init0
+    -setup test::init0
     -body {
-	proc t {parent} [bdd::datalog::compileProgram db {
+	db datalogMethod t {parent} {
 	} {
 	    isParentOf($parent, _).
 	} {
-	}]
-	t $p(Elizabeth)
+	}
+	db t $::test::p(Elizabeth)
 	set result {}
-	foreach name $people {
+	foreach name $::test::people {
 	    dict set need $name {}
 	}
 	db enumerate d isParentOf {
 	    set p1 [dict get $d p1]
-	    set name1 [lindex $people $p1]
+	    set name1 [lindex $::test::people $p1]
 	    set p2 [dict get $d p2]
-	    if {$p2 >= [llength $people]} {
+	    if {$p2 >= [llength $::test::people]} {
 		set name2 $p2
 	    } else {
-		set name2 [lindex $people $p2]
+		set name2 [lindex $::test::people $p2]
 	    }
 	    lappend result $name1 $name2
 	    if {$name1 ne {Elizabeth}} {
@@ -111,23 +115,23 @@ test datalog-1.2 {assert a fact with a free var and enumerate over it} {*}{
 	set need
     }
     -result {}
-    -cleanup fini0
+    -cleanup test::fini0
 }
 
 test datalog-1.3 {assert two facts} {*}{
-    -setup init0
+    -setup test::init0
     -body {
-	proc t {parent} [bdd::datalog::compileProgram db {
+	db datalogMethod t {parent} {
 	} {
 	    isParentOf(31, $parent).
 	    "isParentOf"($parent, 30).
 	} {
-	}]
-	t $p(Elizabeth)
+	}
+	db t $::test::p(Elizabeth)
 	set result {}
 	set need {}
-	dict set need 31 $p(Elizabeth) {}
-	dict set need $p(Elizabeth) 30 {}
+	dict set need 31 $::test::p(Elizabeth) {}
+	dict set need $::test::p(Elizabeth) 30 {}
 	db enumerate d isParentOf {
 	    set p1 [dict get $d p1]
 	    set p2 [dict get $d p2]
@@ -146,39 +150,39 @@ test datalog-1.3 {assert two facts} {*}{
 	concat
     }
     -result {}
-    -cleanup fini0
+    -cleanup test::fini0
 }
 
 test datalog-2.1 {simple query} {*}{
-    -setup init1
+    -setup test::init1
     -body {
-	proc t {parent} [bdd::datalog::compileProgram db {
-	    variable p
-	    variable people
+	db datalogMethod t {parent} {
+	    variable ::test::p
+	    variable ::test::people
 	    set p1 $p($parent)
 	    set results {}
 	} {
 	    isParentOf($p1,p2)?
 	} d {
-	    lappend results [lindex $people [dict get $d p2]]
+	    lappend results [lindex $::test::people [dict get $d p2]]
 	} {
 	    return [lsort $results]
-	}]
-	t Elizabeth
+	}
+	db t Elizabeth
     }
-    -cleanup fini1
+    -cleanup test::fini1
     -result {Andrew Anne Charles Edward}
 }
 
 test datalog-3.1 {trivial rule} {
     -setup {
-	init1
+	test::init1
 	db relation resultSet p2
     }
     -body {
-	proc t {parent} [bdd::datalog::compileProgram db {
-	    variable p
-	    variable people
+	db datalogMethod t {parent} {
+	    variable ::test::p
+	    variable ::test::people
 	    set p1 $p($parent)
 	    set results {}
 	} {
@@ -188,22 +192,22 @@ test datalog-3.1 {trivial rule} {
 	    lappend results [lindex $people [dict get $d p2]]
 	} {
 	    lsort $results
-	}]
-	t Elizabeth
+	}
+	db t Elizabeth
     }
-    -cleanup fini1
+    -cleanup test::fini1
     -result {Andrew Anne Charles Edward}
 }
 
 test datalog-3.2 {rule with inequality} {
     -setup {
-	init1
+	test::init1
 	db relation isSiblingOf p1 p2
     }
     -body {
-	proc t {} [bdd::datalog::compileProgram db {
-	    variable p
-	    variable people
+	db datalogMethod t {} {
+	    variable ::test::p
+	    variable ::test::people
 	    set results {}
 	} {
 	    isSiblingOf(p1,p2) :- isParentOf(p3,p1), isParentOf(p3,p2), p1!=p2.
@@ -215,24 +219,24 @@ test datalog-3.2 {rule with inequality} {
 			    [lindex $people [dict get $d p2]]]]
 	} {
 	    lsort -unique $results
-	}]
-	t
+	}
+	db t
     }
-    -cleanup fini1
+    -cleanup test::fini1
     -result {{Andrew Anne} {Andrew Charles} {Andrew Edward} {Anne Charles} {Anne Edward} {Beatrice Eugenie} {Charles Edward} {Harry William} {James Louise}}
 
 }
 
 test datalog-3.3 {rule with NOT} {*}{
     -setup {
-	init1
+	test::init1
 	db relation hasParent p2
 	db relation hasNoParent p2
     }
     -body {
-	proc t {} [bdd::datalog::compileProgram db {
-	    variable p
-	    variable people
+	db datalogMethod t {} {
+	    variable ::test::p
+	    variable ::test::people
 	    set results {}
 	} {
 	    hasParent(p2) :- isParentOf(_, p2).
@@ -245,22 +249,22 @@ test datalog-3.3 {rule with NOT} {*}{
 	    }
 	} {
 	    lsort $result
-	}]
-	t
+	}
+	db t
     }
-    -cleanup fini1
+    -cleanup test::fini1
     -result Elizabeth
 }
 
 test datalog-4.1 {simple recursion} {*}{
     -setup {
-	init1
+	test::init1
 	db relation isAncestorOf p1 p2
     }
     -body {
 	proc t {who} [bdd::datalog::compileProgram db {
-	    variable p
-	    variable people
+	    variable ::test::p
+	    variable ::test::people
 	    set results {}
 	    set p2 $p($who)
 	} {
@@ -277,7 +281,7 @@ test datalog-4.1 {simple recursion} {*}{
 	}]
 	t George
     }
-    -cleanup fini1
+    -cleanup test::fini1
     -result {Charles Elizabeth George William}
 }
 
