@@ -10,8 +10,6 @@
 #
 #------------------------------------------------------------------------------
 
-puts "START: [info script]"
-
 package require Tcl 8.6
 package require tclbdd 0.1
 package require tclbdd::fddd 0.1
@@ -2032,7 +2030,6 @@ proc bdd::datalog::compileProgram {db prelude programText args} {
 
 }
 
-puts "DEFINE: bdd::datalog::database"
 oo::class create bdd::datalog::database {
     superclass ::bdd::fddd::database
 
