@@ -2037,6 +2037,10 @@ oo::class create bdd::datalog::database {
 	next {*}$args
     }
 
+    method tclMethod {name arglist body} {
+	oo::objdefine [self] method $name $arglist $body
+    }
+    
     method datalogMethod {name arglist args} {
 	oo::objdefine [self] method $name $arglist \
 	    [bdd::datalog::compileProgram [self] {*}$args]
