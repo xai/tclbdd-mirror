@@ -1555,12 +1555,31 @@ oo::class create bdd::datalog::program {
 	
     }
 
+    method startMeasure {ind bodyVar instrumentLevel} {
+	if {$instrumentLevel >= 1} {
+	    upvar 1 $bodyVar body
+	    append body $ind {set tock [clock microseconds]} \n
+	}
+    }
+    method endMeasure {ind bodyVar instrumentLevel instr} {
+	if {$instrumentLevel >= 1} {
+	    upvar 1 $bodyVar body
+	    append body $ind {set beadCount 0} \n
+	    append body $ind {foreach {col bit n} [sys profile } [lindex $instr 1] {] } \{ \n
+	    append body $ind {    incr beadCount $n} \n
+	    append body $ind \} \n
+	    append body $ind \
+		[string map [list @instr $instr] \
+		     {puts [format "%10.6f: %6i @instr" [expr {1.0e-6*([clock microseconds] - $tock)}] $beadCount]}] \n
+	}
+    }
+
     # Method: generateCode
     #
     #	Generates Tcl code for a Datalog program from the intermediate code 
     #	lists
 
-    method generateCode {args} {
+    method generateCode {instrumentLevel args} {
 
 	set loaders {}
 
@@ -1571,7 +1590,16 @@ oo::class create bdd::datalog::program {
 	set ind0 {    }
 	set ind {    }
 
+	set pc 0
+	if {$instrumentLevel >= 1} {
+	    puts "Relational algebra for Datalog program:"
+	    set pc 0
+	}
 	foreach instr $intcode {
+	    if {$instrumentLevel >= 1} {
+		puts [format {%6d: %s} $pc $instr]
+		incr pc
+	    }
 	    switch -exact -- [lindex $instr 0] {
 		RELATION {
 		    $db relation [lindex $instr 1] {*}[lindex $instr 2]
@@ -1580,8 +1608,10 @@ oo::class create bdd::datalog::program {
 		}
 		
 		ANTIJOIN {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db antijoin {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		BEGINLOOP {
 		    append body $ind "while 1 \{\n"
@@ -1595,16 +1625,22 @@ oo::class create bdd::datalog::program {
 		    append body $ind "\}" \n
 		}
 		EQUALITY {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db equate {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		INEQUALITY {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db inequality {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		JOIN {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db join {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		LOAD {
 		    # append body $ind # $instr \n
@@ -1630,24 +1666,34 @@ oo::class create bdd::datalog::program {
 		    append body \n
 		}
 		NEGATE {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db negate {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		PROJECT {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db project {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		RENAME {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db replace {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		SET {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db set {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		UNION {
+		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db union {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
 		}
 
 		RESULT {
@@ -1665,6 +1711,9 @@ oo::class create bdd::datalog::program {
 		}
 	    }
 
+	}
+	if {$instrumentLevel > 0} {
+	    append prologue $ind "puts \"\[info level 0\]:\""
 	}
 	return $prologue$body$epilogue
 
@@ -1979,9 +2028,15 @@ proc bdd::datalog::SCC_coro_worker {v edges} {
 # # What items are the grandparents of item 0?
 # puts [grandparents 0]; # prints a list containing 3, 4, 5, and 6
 
-proc bdd::datalog::compileProgram {db prelude programText args} {
+proc bdd::datalog::compileProgram {db args} {
 
     variable parser
+
+    set instrumentLevel 0
+    if {[lindex $args 0] eq {-instrument}} {
+	set args [lassign $args - instrumentLevel]
+    }
+    set args [lassign $args prelude programText]
 
     switch -exact -- [llength $args] {
 	1 {
@@ -2012,13 +2067,22 @@ proc bdd::datalog::compileProgram {db prelude programText args} {
 	# Plan the execution
 	set plan [$program planExecution]
 
+	if {$instrumentLevel >= 1} {
+	    puts "Execution plan for Datalog program:"
+	    set p 0
+	    foreach instr $plan {
+		puts [format {%6d: %s} $p $instr]
+		incr p
+	    }
+	}
+
 	# Translate the execution plan to relational algebra
 	$program translateExecutionPlan $plan
 
 	# Generate code
 	append result \
 	    $prelude \n \
-	    [$program generateCode {*}$dictAndAction] \n \
+	    [$program generateCode $instrumentLevel {*}$dictAndAction] \n \
 	    $postlude
 
     } finally {
