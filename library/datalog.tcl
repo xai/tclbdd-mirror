@@ -1498,9 +1498,24 @@ oo::class create bdd::datalog::program {
 	    }
 	}
 	if {$needProject} {
-	    lappend intcode \
-		[list RELATION $projector $projectColumns] \
-		[list PROJECT $projector $sourceRelation]
+
+	    # Peephole optimization. If the previous operation was a join
+	    # or antijoin resulting in a temporary variable, coalesce it with
+	    # the projection, because the coalesced operation will be
+	    # more than twice as fast as the two operations performed 
+	    # separately.
+	    if {[lindex $intcode end-1 0] eq "RELATION"
+		&& [lindex $intcode end-1 1] eq $sourceRelation
+		&& [lindex $intcode end 0] in {JOIN ANTIJOIN}
+		&& [lindex $intcode end 1] eq $sourceRelation} {
+		lset intcode end-1 [list RELATION $projector $projectColumns]
+		lset intcode end 0 [lindex $intcode end 0]+PROJECT
+		lset intcode end 1 $projector
+	    } else {
+		lappend intcode \
+		    [list RELATION $projector $projectColumns] \
+		    [list PROJECT $projector $sourceRelation]
+	    }
 	    set renameSource $projector
 	} else {
 	    set renameSource $sourceRelation
@@ -1613,6 +1628,12 @@ oo::class create bdd::datalog::program {
 			[$db antijoin {*}[lrange $instr 1 end]] \n
 		    my endMeasure $ind body $instrumentLevel $instr
 		}
+		ANTIJOIN+PROJECT {
+		    my startMeasure $ind body $instrumentLevel
+		    append body $ind \
+			[$db antijoin+project {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
+		}
 		BEGINLOOP {
 		    append body $ind "while 1 \{\n"
 		    set ind "$ind    "
@@ -1640,6 +1661,12 @@ oo::class create bdd::datalog::program {
 		    my startMeasure $ind body $instrumentLevel
 		    append body $ind \
 			[$db join {*}[lrange $instr 1 end]] \n
+		    my endMeasure $ind body $instrumentLevel $instr
+		}
+		JOIN+PROJECT {
+		    my startMeasure $ind body $instrumentLevel
+		    append body $ind \
+			[$db join+project {*}[lrange $instr 1 end]] \n
 		    my endMeasure $ind body $instrumentLevel $instr
 		}
 		LOAD {
@@ -1707,7 +1734,7 @@ oo::class create bdd::datalog::program {
 		}
 
 		default {
-		    error "in generateCode: can't happen"
+		    error "in generateCode: instr=$instr can't happen"
 		}
 	    }
 

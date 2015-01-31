@@ -332,6 +332,7 @@ proc makeDB {} {
                   [bdd::fddd::domain xyz 3 bigendian]]]
     ::db relation isParentOf parent child
     ::db relation result parent child
+    ::db relation hasTrolledParent child
     ::db relation troll parent
     ::db relation temp1 parent xyz
     ::db relation temp2 xyz child
@@ -400,6 +401,116 @@ test fddd-6.4 {antijoin} {*}{
         parent 1 child 3
         parent 3 child 6
         parent 3 child 7
+    }
+    -cleanup {db destroy}
+}
+
+# fddd-6a - antijoin+project
+
+test fddd-6a.1 {antijoin+project - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db antijoin+project rubbish isParentOf troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-6a.2 {antijoin+project - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db antijoin+project result rubbish troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-6a.3 {antijoin+project - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db antijoin+project result isParentOf rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-6a.4 {antijoin+project} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db antijoin+project result isParentOf troll]
+        set r \n
+        ::db enumerate d result {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        parent 1 child 2
+        parent 1 child 3
+        parent 3 child 6
+        parent 3 child 7
+    }
+    -cleanup {db destroy}
+}
+
+test fddd-6a.4 {antijoin+project} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db antijoin+project result isParentOf troll]
+        set r \n
+        ::db enumerate d result {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        parent 1 child 2
+        parent 1 child 3
+        parent 3 child 6
+        parent 3 child 7
+    }
+    -cleanup {db destroy}
+}
+
+test fddd-6a.5 {antijoin+project} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db antijoin+project hasTrolledParent isParentOf troll]
+        set r \n
+        ::db enumerate d hasTrolledParent {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        child 2
+        child 6
+        child 3
+        child 7
     }
     -cleanup {db destroy}
 }
@@ -590,13 +701,13 @@ test fddd-10.1 {forget - do nothing gracefully} {*}{
         db relations
     }
     -cleanup {db destroy}
-    -result {everything isParentOf result temp1 temp2 temp3 troll}
+    -result {everything hasTrolledParent isParentOf result temp1 temp2 temp3 troll}
 }
 
 test fddd-10.2 {forget - forget things} {*}{
     -setup makeDB
     -body {
-        db forget_relation everything temp1 temp2 temp3 troll 
+        db forget_relation everything hasTrolledParent temp1 temp2 temp3 troll 
         db relations
     }
     -cleanup {db destroy}
@@ -733,6 +844,89 @@ test fddd-12.4 {join} {*}{
         parent 0 child 1
         parent 2 child 4
         parent 2 child 5
+    }
+    -cleanup {db destroy}
+}
+
+test fddd-12a.1 {join - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db join+project rubbish isParentOf troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-12.2 {join+project - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db join result rubbish troll
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-12.3 {join+project - relation doesn't exist} {
+    -setup makeDB
+    -body {
+        list [catch {
+            db join result isParentOf rubbish
+        } result] $result $::errorCode
+    }
+    -cleanup {db destroy}
+    -result {1 {relation "rubbish" is not defined in this database} {FDDD RelationNotDefined rubbish}}
+}
+
+test fddd-12.4 {join+project} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db join result isParentOf troll]
+        set r \n
+        ::db enumerate d result {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        parent 0 child 0
+        parent 0 child 1
+        parent 2 child 4
+        parent 2 child 5
+    }
+    -cleanup {db destroy}
+}
+
+test fddd-12.5 {join+project} {*}{
+    -setup {
+        makeDB
+        foreach i {0 2} {
+            loadTroll $i
+        }
+    }
+    -body {
+        eval [db join+project hasTrolledParent isParentOf troll]
+        set r \n
+        ::db enumerate d hasTrolledParent {
+            append r {        } $d \n
+        }
+        append r {    }
+        string map [list \t {        }] $r
+    }
+    -result {
+        child 0
+        child 4
+        child 1
+        child 5
     }
     -cleanup {db destroy}
 }

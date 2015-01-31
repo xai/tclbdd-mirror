@@ -96,6 +96,7 @@ package require \fBtclbdd 0.1\fR
 
 \fIsystem\fR \fBload\fR \fIresultBdd\fR \fImapping\fR \fIvalue...\fR
 \fIsystem\fR \fBproject\fR \fBresultBdd\fR \fIindexList\fR \fBbdd\fR
+\fIsystem\fR \fBproject_\fR\fIbinop\fR \fIresultBdd\fR \fIvarList\fR \fIbdd1\fR \fIbdd2\fR
 \fIsystem\fR \fBreplace\fR \fBresultBdd\fR \fIindexList\fR \fIindexList2\fR \fIbdd\fR
 
 \fBbdd::foreach_fullsat\fR \fItclVar\fB \fIvarlist\fR \fIterm\fR \fIscript\fR
@@ -527,7 +528,12 @@ wishes to express Boolean functions by enumerating rows of their truth tables
 or in "sum of products" form.
 .TP
 \fIsystem\fR \fBproject\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
-This is a convenience method equivalent to [\fIsystem\fR \fBforall\fR],
+This is a convenience method equivalent to [\fIsystem\fR \fBexists\fR],
+except that the \fIvarList\fR argument contains a list of variable numbers,
+rather than of variable names.
+.TP
+\fIsystem\fR \fBproject_\fR\fIbinop\fR \fIresultBdd\fR \fIvarList\fR \fIbdd\fR
+This is a convenience method equivalent to [\fIsystem\fR \fBexists_\fR\fIbinop\fR],
 except that the \fIvarList\fR argument contains a list of variable numbers,
 rather than of variable names.
 .TP

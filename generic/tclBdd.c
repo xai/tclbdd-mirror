@@ -118,6 +118,8 @@ static int CompareVariableIndices(const void* a, const void* b);
 static void DeletePerInterpData(PerInterpData*);
 static int BddSystemConstructor(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				int, Tcl_Obj* const[]);
+static int BddSystemAppprojMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
+				  int, Tcl_Obj* const[]);
 static int BddSystemAppquantMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
 				   int, Tcl_Obj* const[]);
 static int BddSystemBeadindexMethod(ClientData, Tcl_Interp*, Tcl_ObjectContext,
@@ -193,6 +195,13 @@ const static Tcl_MethodType BddSystemConstructorType = {
     CloneMethod			   /* method clone proc */
 };
 
+const static Tcl_MethodType BddSystemAppprojMethodType = {
+    TCL_OO_METHOD_VERSION_CURRENT, /* version */
+    "appproj",			   /* name */
+    BddSystemAppprojMethod,	   /* callProc */
+    DeleteMethod,		   /* method delete proc */
+    CloneMethod			   /* method clone proc */
+};
 const static Tcl_MethodType BddSystemAppquantMethodType = {
     TCL_OO_METHOD_VERSION_CURRENT, /* version */
     "appquant",			   /* name */
@@ -511,7 +520,17 @@ Tclbdd_Init(Tcl_Interp* interp)
 			  &BddSystemAppquantMethodType,
 			  (ClientData) (size_t) ((quantPtr->quant<<4)
 						 | (opPtr->op)));
+	    Tcl_DecrRefCount(nameObj);
 	}
+    }
+    for (opPtr = BinOpTable; opPtr->name != NULL; ++opPtr) {
+	nameObj = Tcl_NewStringObj("project_", -1);
+	Tcl_AppendToObj(nameObj, opPtr->name, -1);
+	Tcl_IncrRefCount(nameObj);
+	Tcl_NewMethod(interp, curClass, nameObj, 1,
+		      &BddSystemAppprojMethodType,
+		      (ClientData) (size_t) (opPtr->op));
+	Tcl_DecrRefCount(nameObj);
     }
 
     /* Provide the package */
@@ -659,6 +678,119 @@ BddSystemBeadindexMethod(
 /*
  *-----------------------------------------------------------------------------
  *
+ * BddSystemAppprojMethod --
+ *
+ *	Applies a binary operation to a pair of BDD's, then projects away a
+ *	set of variables from the result, that is, applies the 'there exists'
+ *	quantifier to those variables.
+ *
+ * Usage:
+ *	$system project_${op} $result $vars $expr1 $expr2
+ *
+ * Parameters:
+ *	system - System of BDD's
+ *	op - Operation to apply before projection: one of the binary
+ *	     operators !=, &, <, <=, ==, >. >=, ^, nand, nor, and |
+ *	result - Name to be assigned to the resulting BDD
+ *	vars - List of integers giving the positions of variables to project
+ *	       away
+ *	expr1 - Left operand to 'op'
+ *	expr2 - Right operand to 'op'
+ *
+ * Results:
+ *	Returns a standard Tcl result.
+ *
+ * Side effects:
+ *	Creates the named 'result' expression if successful.
+ *
+ * This is the same operation as existentially quantified operator
+ * application. It is provided for the convenience of Finite Domain
+ * Decision Diagrams, where it implements the relational 'project'
+ * operator following a 'join' or 'antijoin'. Note that the notation
+ * is different from the usual 'project'; the variable list to this
+ * command specifies the variables to discard, while the conventional
+ * 'project' operation specifies the columns to keep.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+static int
+BddSystemAppprojMethod(
+    ClientData clientData,	/* Operation to perform */
+    Tcl_Interp* interp,		/* Tcl interpreter */
+    Tcl_ObjectContext ctx,	/* Object context */
+    int objc,			/* Parameter count */
+    Tcl_Obj *const objv[])	/* Parameter vector */
+{
+    Tcl_Object thisObject = Tcl_ObjectContextObject(ctx);
+				/* The current object */
+    BDD_BinOp op = (BDD_BinOp) ((size_t) clientData);
+				/* The operation to apply */
+    BddSystemData* sdata = (BddSystemData*)
+	Tcl_ObjectGetMetadata(thisObject, &BddSystemDataType);
+				/* The current system of expressions */
+    int skipped = Tcl_ObjectContextSkippedArgs(ctx);
+				/* The number of args used in method dispatch */
+    int varc;			/* Number of variables to discard */
+    Tcl_Obj** varv;		/* Indices of variables to project away */
+    BDD_BeadIndex u1;		/* Left hand operand */
+    BDD_BeadIndex u2;		/* Right hand operand */
+    int vIndex;			/* Variable index as parsed by Tcl */
+    BDD_VariableIndex* v;	/* Variables to discard */
+    Tcl_Obj* errorMessage;	/* Error message from this method */
+    BDD_BeadIndex result;	/* Result of the operation */
+    BDD_VariableIndex i;
+
+    /* Check syntax */
+
+    if (objc != skipped+4) {
+	Tcl_WrongNumArgs(interp, skipped, objv, "name varList expr1 expr2");
+	return TCL_ERROR;
+    }  
+    if (Tcl_ListObjGetElements(interp, objv[skipped+1],
+			       &varc, &varv) != TCL_OK
+	|| FindNamedExpression(interp, sdata, objv[skipped+2],
+			       &u1) != TCL_OK
+	|| FindNamedExpression(interp, sdata, objv[skipped+3],
+			       &u2) != TCL_OK) {
+	return TCL_ERROR;
+    }
+    v = ckalloc(varc * sizeof(BDD_VariableIndex));
+    for (i = 0; i < varc; ++i) {
+	if (Tcl_GetIntFromObj(interp, varv[i], &vIndex) != TCL_OK) {
+	    ckfree(v);
+	    return TCL_ERROR;
+	}
+	if (vIndex < 0) {
+	    errorMessage =
+		Tcl_ObjPrintf("expected nonnegative integer but got \"%s\"",
+			      Tcl_GetString(varv[i]));
+	    Tcl_SetObjResult(interp, errorMessage);
+	    Tcl_SetErrorCode(interp, "BDD", "NegativeVarIndex", 
+			     Tcl_GetString(varv[i]), NULL);
+	    return TCL_ERROR;
+	}
+	v[i] = (BDD_VariableIndex) vIndex;
+	if (i > 0 && v[i] <= v[i-1]) {
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj("variables are not in "
+						      "increasing order", -1));
+	    Tcl_SetErrorCode(interp, "BDD", "VarsOutOfOrder", NULL);
+	    ckfree(v);
+	    return TCL_ERROR;
+	}
+    }
+
+    result = BDD_ApplyAndQuantify(sdata->system, BDD_QUANT_EXISTS,
+				  varc, v, op, u1, u2);
+    ckfree(v);
+    SetNamedExpression(sdata, objv[skipped], result);
+    BDD_UnrefBead(sdata->system, result);
+    return TCL_OK;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
  * BddSystemAppquantMethod --
  *
  *	Applies a binary operation to a pair of BDD's, then applies a
@@ -676,7 +808,7 @@ BddSystemBeadindexMethod(
  *      result - Name to be assigned to the resulting BDD.
  *	vars   - List of names of variables to quantify over
  *	expr1  - Left operand
- *	expr2  - Rught operand
+ *	expr2  - Right operand
  */
 
 static int
@@ -712,7 +844,11 @@ BddSystemAppquantMethod(
     /* Check syntax */
 
     if (objc != skipped+4) {
-	Tcl_WrongNumArgs(interp, skipped, objv, "name vars expr");
+	Tcl_WrongNumArgs(interp, skipped, objv, "name vars expr1 expr2");
+	return TCL_ERROR;
+    }
+    if (Tcl_ListObjGetElements(interp, objv[skipped+1],
+			       &varc, &varv) != TCL_OK) {
 	return TCL_ERROR;
     }
     if (FindNamedExpression(interp, sdata, objv[skipped+2],

@@ -79,9 +79,11 @@ package require \fBtclfddd 0.1\fR
 
 \fIdb\fR \fB===\fR \fIrelation1\fR \fIrelation2\fR
 \fIdb\fR \fBantijoin\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
+\fIdb\fR \fBantijoin+project\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
 \fIdb\fR \fBequate\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
 \fIdb\fR \fBinequality\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
 \fIdb\fR \fBjoin\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
+\fIdb\fR \fBjoin+project\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
 \fIdb\fR \fBnegate\fR \fIresultRelation\fR \fIrelation1\fR
 \fIdb\fR \fBproject\fR \fIresultRelation\fR \fIrelation1\fR
 \fIdb\fR \fBreplace\fR \fIresultRelation\fR \fIrelation1\fR ?\fIoutColName inColName\fR?...
@@ -270,6 +272,19 @@ every possible value for the missing columns. Most commonly, \fIrelation2\fR
 will have no excess columns, and will contain a set of values identifying
 rows to be deleted.
 .TP
+\fIdb\fR \fBantijoin+project\fR \fIresultRelation\fR \fIrelation1\fR \fIrelation2\fR
+This method generates and returns a codeburst that computes the \fIantijoin\fR
+of two tables in \fIdb\fR whose names are \fIrelation1\fR and \fIrelation2\fR.
+The result, which is placed in \fIresultRelation\fR, is the set of tuples
+that are present in \fIrelation1\fR but not in \fIrelation2\fR, with any
+columns that are not present in \fIresultRelation\fR projected away.
+.IP
+If either of the input relations contains columns that are not present
+in the other, the tuples of the other relation are presumed to contain
+every possible value for the missing columns. Most commonly, \fIrelation2\fR
+will have no excess columns, and will contain a set of values identifying
+rows to be deleted.
+.TP
 \fIdb\fR \fBequate\fR \fIresultRelation\fR \fIcolName1\fR \fIcolName2\fR
 This method generates and returns a codeburst that sets \fIresultRelation\fR
 so that it contains every possible value for columns other than
@@ -299,6 +314,17 @@ This method generates and returns a codeburst that computes the \fIjoin\fR
 of two tables in \fIdb\fR whose names are \fIrelation1\fR and \fIrelation2\fR.
 The result, which is placed in \fIresultRelation\fR, is the set of tuples
 that are present in both \fIrelation1\fR and \fIrelation2\fR. 
+.IP
+If either of the input relations contains columns that are not present
+in the other, the tuples of the other relation are presumed to contain
+every matching value for the missing columns. 
+.TP
+\fIdb\fR \fBjoin+project\fR \fIresultRelation\fR \fIrelation1\fR \fRrelation2\fR
+This method generates and returns a codeburst that computes the \fIjoin\fR
+of two tables in \fIdb\fR whose names are \fIrelation1\fR and \fIrelation2\fR.
+The result, which is placed in \fIresultRelation\fR, is the set of tuples
+that are present in both \fIrelation1\fR and \fIrelation2\fR. Any columns not 
+present in \fIresultRelation\fR are projected away.
 .IP
 If either of the input relations contains columns that are not present
 in the other, the tuples of the other relation are presumed to contain

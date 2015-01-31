@@ -395,6 +395,71 @@ oo::class create bdd::fddd::database {
 	return [list [namespace which sys] > $dest $source1 $source2]
     }
 
+    # Method: antijoin+project
+    #
+    #	Generates code to antijoin a pair of relations and project away a
+    #	set of columns
+    #
+    # Usage:
+    #	$db antijoin+project dest source1 source2
+    #
+    # Results:
+    #	Returns a fragment of code that will perform the antijoin and projection
+    #
+    # The result of the antijoin is the set of rows that are
+    # members of the $source relation but not members of the $dest
+    # relation. This is well defined for any two relations: if either
+    # relation contains excess columns, the other relation is presumed
+    # to contain tuples with every possible value in those columns.
+    # Of course, the excess columns may be projected away before or
+    # after the antijoin. Most commonly, the columns of $source2 will
+    # all appear in $source1.
+    #
+    # The columns of the result relation must be the union of the
+    # columns of the two inputs.
+    #
+    # This method does not perform the copy directly: it generates
+    # code to perform the copy.
+    #
+    # The antijoin executes in time proportional to the size of the
+    # source1 BDD.
+
+    method antijoin+project {dest source1 source2} {
+
+	my relationMustExist $dest
+	my relationMustExist $source1
+	my relationMustExist $source2
+
+	# Calculate the union of the columns in the relations being joined.
+	set sourcecolumns [dict get $m_relcolumns $source1]
+	lappend sourcecolumns {*}[dict get $m_relcolumns $source2]
+	set sourcecolumns [lsort -dictionary -unique $sourcecolumns]
+
+	# Partition the source columns into those to be kept and those
+	# to be projected away
+	set discards {}
+	set want {}
+	foreach col [dict get $m_relcolumns $dest] {
+	    dict set want $col {}
+	}
+	foreach col $sourcecolumns {
+	    if {![dict exists $want $col]} {
+		lappend discards {*}[dict get $m_columns $col]
+	    } else {
+		dict unset want $col
+	    }
+	}
+	if {[dict size $want] != 0} {
+	    return -code error \
+		-errorcode [list FDDD ProjectColumnsMissing \
+				[dict keys $want]]\
+		"column(s) missing from source relation: [dict keys $want]"
+	}
+
+	return [list [namespace which sys] project_> \
+		    $dest [lsort -integer $discards] $source1 $source2]
+    }
+
     # Method: columnMustExist
     #
     #	Makes sure that a given column exists in the database
@@ -729,7 +794,7 @@ oo::class create bdd::fddd::database {
     #	Returns a fragment of code that will perform the join.
     #
     # The result of the join is the set of rows that are
-    # members of the $source relation but not members of the $dest
+    # members of the $source relation and members of the $dest
     # relation. This is well defined for any two relations: if either
     # relation contains excess columns, the other relation is presumed
     # to contain tuples with every possible value in those columns.
@@ -759,6 +824,71 @@ oo::class create bdd::fddd::database {
 
 	# Make code to do the join
 	return [list [namespace which sys] & $dest $source1 $source2]
+    }
+
+    # Method: join+project
+    #
+    #	Generates code to join a pair of relations and project down to
+    #	specific columns
+    #
+    # Usage:
+    #	$db join+project dest source1 source2
+    #
+    # Results:
+    #	Returns a fragment of code that will perform the join.
+    #
+    # The result of the join is the set of rows that are
+    # members of the $source relation and members of the $dest
+    # relation. This is well defined for any two relations: if either
+    # relation contains excess columns, the other relation is presumed
+    # to contain tuples with every possible value in those columns.
+    # Of course, the excess columns may be projected away before or
+    # after the join. Most commonly, the columns of $source2 will
+    # all appear in $source1.
+    #
+    # The columns of the result relation must be the union of the
+    # columns of the two inputs.
+    #
+    # This method does not perform the copy directly: it generates
+    # code to perform the copy.
+    #
+    # The join executes in time proportional to the size of the
+    # source1 BDD.
+
+    method join+project {dest source1 source2} {
+
+	my relationMustExist $dest
+	my relationMustExist $source1
+	my relationMustExist $source2
+
+	# Calculate the union of the columns in the relations being joined.
+	set sourcecolumns [dict get $m_relcolumns $source1]
+	lappend sourcecolumns {*}[dict get $m_relcolumns $source2]
+	set sourcecolumns [lsort -dictionary -unique $sourcecolumns]
+
+	# Partition the source columns into those to be kept and those
+	# to be projected away
+	set discards {}
+	set want {}
+	foreach col [dict get $m_relcolumns $dest] {
+	    dict set want $col {}
+	}
+	foreach col $sourcecolumns {
+	    if {![dict exists $want $col]} {
+		lappend discards {*}[dict get $m_columns $col]
+	    } else {
+		dict unset want $col
+	    }
+	}
+	if {[dict size $want] != 0} {
+	    return -code error \
+		-errorcode [list FDDD ProjectColumnsMissing \
+				[dict keys $want]]\
+		"column(s) missing from source relation: [dict keys $want]"
+	}
+
+	return [list [namespace which sys] project_& \
+		    $dest [lsort -integer $discards] $source1 $source2]
     }
 
     # Method: loader
@@ -890,6 +1020,7 @@ oo::class create bdd::fddd::database {
 	my relationMustExist $dest
 	my relationMustExist $source
 	set discards {}
+	set want {}
 	foreach col [dict get $m_relcolumns $dest] {
 	    dict set want $col {}
 	}
